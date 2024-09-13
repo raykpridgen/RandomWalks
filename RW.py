@@ -2,10 +2,6 @@ import RWfunctions
 import time
 import matplotlib.pyplot as plt
 
-# This is a function that calculates the probability that a particle will move either left or right
-# A sucess is a move right, a failure is a move left. Probabilities are compliment for each line. Top = P Bottom = 1 - P
-# Takes the diffusion constant, b, which is spin, and delta t4
-# When b is zero the dr4ift automatically becomes 0.5, however D or b must be nonzero
 
 # Clock time to record when the program starts
 startTime = time.perf_counter()
@@ -59,40 +55,8 @@ for i in range(int(increments)):
 moveTime = time.perf_counter()
 
 ''' Graph Stage '''
-
-# Initialize lists for x-values and particle counts
-particleRange = [i * moveDistance for i in range(-increments, increments + 1)]
-particlesTop = [0] * len(particleRange)
-particlesBottom = [0] * len(particleRange)
-
-# Count the particles on the top and bottom lines
-for particle in particleList:
-    index = int((particle[0] / moveDistance) + increments)  # Calculate index for x-value
-    if particle[1] == 1:
-        particlesTop[index] += 1
-    elif particle[1] == 0:
-        particlesBottom[index] += 1
-
-# Calculate total particles for normalization
-topAmount = sum(particlesTop)
-bottomAmount = sum(particlesBottom)
-
-# Normalize counts to proportions
-particlesTop = [count / topAmount for count in particlesTop]
-particlesBottom = [-count / bottomAmount for count in particlesBottom]
-
-plt.bar(particleRange, particlesTop, label="Top Line Particles", color="blue")
-plt.bar(particleRange, particlesBottom, label="Bottom Line Particles", color="purple")
-plt.legend()
-plt.title("Concurrent Flow of Particles on Two Discrete Lines")
-plt.xlabel("X-Axis Location")
-plt.ylabel("Particle Frequency")
-plt.grid(True)
-
-# Time it took to graph the data. Will be the first thing subtracted from the start time to get the total time
-
+RWfunctions.graphing(increments, moveDistance, particleList)
 graphTime = time.perf_counter()
-
 plt.show()
 
 
