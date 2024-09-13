@@ -1,6 +1,8 @@
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import time
+import sys
 
 # This is a function that calculates the probability that a particle will move either left or right
 # A sucess is a move right, a failure is a move left. Probabilities are compliment for each line. Top = P Bottom = 1 - P
@@ -127,15 +129,18 @@ def graphing(increments, moveDistance, particleList):
     particleRange = [i * moveDistance for i in range(-increments, increments + 1)]
     particlesTop = [0] * len(particleRange)
     particlesBottom = [0] * len(particleRange)
-
     # Count the particles on the top and bottom lines
     for particle in particleList:
         index = int((particle[0] / moveDistance) + increments)  # Calculate index for x-value
-        if particle[1] == 1:
-            particlesTop[index] += 1
-        elif particle[1] == 0:
-            particlesBottom[index] += 1
-
+        #print(f"Index: {index}")
+        try:
+            if particle[1] == 1:
+                particlesTop[index] += 1
+            elif particle[1] == 0:
+                particlesBottom[index] += 1
+        except IndexError:
+            print(f"Particle: {particle} failed trying to index at {index}")
+            sys.exit()
     # Calculate total particles for normalization
     topAmount = sum(particlesTop)
     bottomAmount = sum(particlesBottom)
@@ -162,12 +167,36 @@ def initSimulation(deltaT, Time, Diff, b, gamma):
     # Probability a particle will move either left or right
     moveProb = moveCalculation(Diff, b, deltaT)
 
-def particleCreeator(numParticles):
+    return increments, moveDistance, jumpProb, moveProb
+
+# This function creates particles somewhere in the space and returns a list of tuple coordinates
+def particleCreator(numParticles, setting='split'):
+
     particleList = []
     # Create particles
-    for i in range(numParticles // 2):
-        particleList.append((0, 1)) # Half the particles start on the top line
-    for i in range(numParticles // 2):
-        particleList.append((0, 0)) # Other half start on the bottom line
+    if setting == 'cT':
+        for i in range(numParticles):
+            particleList.append((0, 1)) # particles start on the top line
+    elif setting == 'cB':
+        for i in range(numParticles):
+            particleList.append((0, 0)) # particles start on the bottom line
+    elif setting == 'split':
+        for i in range(numParticles // 2):
+            particleList.append((0, 1)) # Half the particles start on the top line
+        for i in range(numParticles // 2):
+            particleList.append((0, 0)) # Other half start on the bottom line
+    
+    return particleList
 
+# This function runs a simulation all in one
+# Starts from the behavior level instead of the parameter level
+def runSimulation(increments, moveDistance, jumpProb, moveProb, numParticles, mode='split'):
+    
+    # Create list of particles 
+    particleList = particleCreator(numParticles, mode)
+    # Iterate through each move / timestep
+    for i in range(int(increments)):
+        particleList = moveParticles(particleList, moveProb, jumpProb, moveDistance)
+    
+    # Return final updated list
     return particleList
