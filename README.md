@@ -4,14 +4,17 @@ Additionally, there is a factor which controls if / at what frequency the partic
 Lines are represented as up and down, similar to up and down spin in electrons. 
 In this simulation, I define a move as a change on the x-axis, and a jump as a change on the y-axis
 
-Takes the following parameters:
+## Takes the following parameters:
 dt - delta t
   T - Time constant
   D - Diffusion constant
   b - spin constant
   gamma - jump factor
 
-Equations are used to calculate the behaviors:
+## Equations are used to calculate the behaviors:
   Number of iterations (times each particle is allowed to move)
+
   Move distance
+
   Move drift (probability a particle will move left or right)
+  
