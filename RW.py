@@ -2,11 +2,9 @@ import numpy as np
 import time
 import math
 import matplotlib.pyplot as plt
-import sys
 
 # C(x, t) where an x-value and a time step are used to calculate the proportion of particles in this place
 #       x = xAxis     t = iterations        v = b       D = 1   
-
 def analyticSolution(x, t, v, D=1):    
     lead = 1 / math.sqrt(4 * math.pi * D * t)
     exponent = -1 * ((x - (v * t)) ** 2)/(4 * D * t)
@@ -19,8 +17,6 @@ def makeSolutionList(xRange, t, v, D=1):
     for xVal in xRange: # Iterate through each value on the applicable x-axis 
         returnList.append(analyticSolution(xVal, t, v, D)) # Append the calculation with parameters
     return returnList
-
-
 
 # This is a function that takes a list of particle frequency lists. 
 # Then uses matplotlib to graph all these functions
@@ -177,8 +173,6 @@ def moveParticleStep(particle, jumpProb, shiftVal, moveDistance):
         else: # If move fails, traverse left
             return (particle[0] - moveDistance + shiftVal, particle[1])    
 
-
-
 # This function moves all the particles in one timestep
 # Takes the full list of particles, drift probability, jump probability, and move distance
 def moveParticles(particleList, LRProb, jumpProb, moveDistance):
@@ -191,15 +185,11 @@ def moveParticles(particleList, LRProb, jumpProb, moveDistance):
 # Clock time to record when the program starts
 startTime = time.perf_counter()
 
-
-
-
-
 ''' Initialization stage '''
 
 # Parameters
-deltaT = 0.1
-timeConst = 40
+deltaT = 0.5
+timeConst = 10
 diffCon = 1
 bSpin = 0.5
 gamma = 0
@@ -237,7 +227,6 @@ for i in range(int(increments)):
 
 moveTime = time.perf_counter()
 
-
 ''' Graph / prep stage '''
 
 # Initialize lists for x-values and particle counts
@@ -270,7 +259,6 @@ solBottom = makeSolutionList(particleRange, timeConst, -bSpin, diffCon)
 solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
 solBottom = [-item * (math.sqrt(deltaT * 8)) for item in solBottom]
 
-
 solTSeries = [particleRange, solTop, "Solution", "black", 1, "Plot"]
 solBSeries = [particleRange, solBottom, "Solution", "black", 1, "Plot"]
 partTSeries = [particleRange, particlesTop, "Top Particles", "blue", 0.5, "Bar"]
@@ -281,24 +269,14 @@ title = f"{numParticles} Random Walkers Taking {moveDistance:.2f} Sized Steps Fo
 
 graphMultipleSeries(seriesList, title, "X-Value", "Particle Frequency")
 
-
 # Time it took to graph the data. Will be the first thing subtracted from the start time to get the total time
-
 graphTime = time.perf_counter()
 
+# Using plt.show outside of the graph function to maintain continuity with graph time
 plt.show()
 
-
-
-
-
-
-
-
-
-
+# Timing function to reflect time invervals of the code
 timing(initTime, createTime, moveTime, graphTime, startTime)
-
 
 print("\n\n\n---------------------Behavior---------------------")
 print(f"         Move Distance: {moveDistance}")
@@ -306,10 +284,6 @@ print(f"            Increments: {increments}")
 print(f"                 Drift: {moveProb:.2f}")
 print(f"                  Jump: {jumpProb}")
 print("--------------------------------------------------")
-#print(particlesTop)
-#print(particlesBottom)
-
-
 
 """ 919
 
@@ -321,6 +295,8 @@ Goals:
     Dicsover the behavior of the sqrt(8*dt) dependence between fourier transform and particles
     Alter the behavior to now add drift as a constant instead of manipulating probabilities
     Keep time 40 and dt gets smaller
+    
     + bdt
 
+        Is this how much I am supposed to add by in the alternative version of moving? Will be checking this
 """
