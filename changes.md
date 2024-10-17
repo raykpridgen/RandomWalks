@@ -36,3 +36,10 @@ Two ways of using sim - Calculate drift with prob move L/R, or Calculate drift w
 Can I make these two methods of sim match? What are the fudge factor(s) between these two methods? 
 
 How can I improve the performance of this code? Should I consider eventually switching to another language like C?
+
+# 10/17/2024
+## Drift step implementation
+Delayed, need to rework base code. See next section
+
+## Changing the behavior
+List of tuples was a bad way to implement the simulation. Tuples are immutable so I am making the particles move by deleting them and making new ones every time. Instead I am going to use a list of positions, so I can just use the same list to add and delete values. s
