@@ -174,16 +174,16 @@ def moveParticleStep(particle, jumpProb, shiftVal, moveDistance):
 
 # This function moves all the particles in one timestep
 # Takes the full list of particles, drift probability, jump probability, and move distance
-def moveParticles(particleList, jumpProb, LRProb, moveDistance):
+def moveParticles(particleListProb, jumpProb, LRProb, moveDistance):
     newList = [] # New list to hold updated particles
-    for particle in particleList: # For each particle
+    for particle in particleListProb: # For each particle
         newParticle = moveParticleProb(particle, jumpProb, LRProb, moveDistance) # Calculate the new move
         newList.append(newParticle) # Append the new particle to the new list
     return newList # Return the list
 
-def moveParticlesStep(particleList, jumpProb, shiftVal, moveDistance):
+def moveParticlesStep(particleListProb, jumpProb, shiftVal, moveDistance):
     newList = [] # New list to hold updated particles
-    for particle in particleList: # For each particle
+    for particle in particleListProb: # For each particle
         newParticle = moveParticleStep(particle, jumpProb, shiftVal, moveDistance) # Calculate the new move
         newList.append(newParticle) # Append the new particle to the new list
     return newList # Return the list
@@ -206,6 +206,7 @@ diffCon = 1
 bSpin = 0.5
 gamma = 0
 numParticles = 10000
+shiftVal = bSpin * deltaT
 
 # Behavior of the simulation
 # Number of iterations the simulation will move the particles through
@@ -220,7 +221,8 @@ jumpProb = deltaT * gamma
 moveProb = moveCalculation(diffCon, bSpin, deltaT)
 
 # List for the particles to be stored in
-particleList = []
+particleListProb = []
+particleListStep = []
 
 initTime = time.perf_counter()
 
@@ -228,14 +230,17 @@ initTime = time.perf_counter()
 
 # Create particles
 for i in range(numParticles // 2):
-    particleList.append((0, 1)) # Half the particles start on the top line
+    particleListProb.append((0, 1)) # Half the particles start on the top line
+    particleListStep.append((0, 1))
 for i in range(numParticles // 2):
-    particleList.append((0, 0)) # Other half start on the bottom line
+    particleListProb.append((0, 0)) # Other half start on the bottom line
+    particleListStep.append((0, 0))
 createTime = time.perf_counter()
 
 # Run simulation through each iteration
 for i in range(int(increments)):
-    particleList = moveParticles(particleList, jumpProb, moveProb, moveDistance) # Change each particle
+    particleListProb = moveParticles(particleListProb, jumpProb, moveProb, moveDistance) # Change each particle
+    particleListStep = moveParticlesStep(particleListStep, jumpProb, shiftVal, moveDistance)
 
 moveTime = time.perf_counter()
 
@@ -246,10 +251,11 @@ particleRange = [i * moveDistance for i in range(-increments, increments + 1)]
 particlesTop = [0] * len(particleRange)
 particlesBottom = [0] * len(particleRange)
 
+
 # Count the particles on the top and bottom lines
-for particle in particleList:
+for particle in particleListProb:
     # X value from tuple, remove moveDistance factor by dividing, and then add the number of increments to cancel negative values
-    index = int((particle[0] / moveDistance) + increments)  # Calculate index for x-value
+    index = int(((particle[0] - shiftVal * increments) / moveDistance) + increments)  # Calculate index for x-value
     # Apply particles to different lists based on line
     if particle[1] == 1:
         particlesTop[index] += 1

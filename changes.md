@@ -36,3 +36,6 @@ Two ways of using sim - Calculate drift with prob move L/R, or Calculate drift w
 Can I make these two methods of sim match? What are the fudge factor(s) between these two methods? 
 
 How can I improve the performance of this code? Should I consider eventually switching to another language like C?
+
+# 10/17/2024
+I realized I have to change the way the simulation stores the particle data. I cannot use a list of tuples, this is pretty inefficient. Instead I am going to use a list that holds entries of the Y values of each series. 
