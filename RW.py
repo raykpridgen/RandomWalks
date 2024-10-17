@@ -130,10 +130,9 @@ def timing(initTime, createTime, moveTime, graphTime, startTime):
     print(f"      Graphing Time: {graphTime:.2f} {graphTimeUnit} - {graphTimeProp:.2f}%")
     print(f"--------------------------------------------------")
 
-# This function takes a particle as a tuple coordinate, along with the behaviors, then moves it appropriately by returning a new particle
+# This function takes a particle as a tuple coordinate, along with the behaviors, then moves part appropriately by returning a new particle
 # Takes the particle as a tuple, probability of jumping to the next line, probability of moving on the x-axis, and the most distance on x-axis
 def moveParticleProb(particle, jumpProb, moveProb, moveDistance):
-    
     # The simulation models concurrent flow, so the move probability is the compliment of that of the top line
     if particle[1] == 0: # If particle is on bottom line
         moveProb = 1 - moveProb # Get compliment of move probability
@@ -175,15 +174,28 @@ def moveParticleStep(particle, jumpProb, shiftVal, moveDistance):
 
 # This function moves all the particles in one timestep
 # Takes the full list of particles, drift probability, jump probability, and move distance
-def moveParticles(particleList, LRProb, jumpProb, moveDistance):
+def moveParticles(particleList, jumpProb, LRProb, moveDistance):
     newList = [] # New list to hold updated particles
     for particle in particleList: # For each particle
         newParticle = moveParticleProb(particle, jumpProb, LRProb, moveDistance) # Calculate the new move
         newList.append(newParticle) # Append the new particle to the new list
     return newList # Return the list
 
+def moveParticlesStep(particleList, jumpProb, shiftVal, moveDistance):
+    newList = [] # New list to hold updated particles
+    for particle in particleList: # For each particle
+        newParticle = moveParticleStep(particle, jumpProb, shiftVal, moveDistance) # Calculate the new move
+        newList.append(newParticle) # Append the new particle to the new list
+    return newList # Return the list
+
 # Clock time to record when the program starts
 startTime = time.perf_counter()
+
+# This is a boolean to hold the type of simulation to run. 
+# Can be the sim with the drift calculated as probability, or calculated with the added drift amount.
+# Difference is using moveParticleProb vs moveParticleStep
+# True is prob, false is step
+simType = True
 
 ''' Initialization stage '''
 
@@ -223,7 +235,7 @@ createTime = time.perf_counter()
 
 # Run simulation through each iteration
 for i in range(int(increments)):
-    particleList = moveParticles(particleList, moveProb, jumpProb, moveDistance) # Change each particle
+    particleList = moveParticles(particleList, jumpProb, moveProb, moveDistance) # Change each particle
 
 moveTime = time.perf_counter()
 
@@ -299,4 +311,5 @@ Goals:
     + bdt
 
         Is this how much I am supposed to add by in the alternative version of moving? Will be checking this
+        Yes it is 
 """
