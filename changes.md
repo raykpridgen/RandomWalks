@@ -42,4 +42,18 @@ How can I improve the performance of this code? Should I consider eventually swi
 Delayed, need to rework base code. See next section
 
 ## Changing the behavior
-List of tuples was a bad way to implement the simulation. Tuples are immutable so I am making the particles move by deleting them and making new ones every time. Instead I am going to use a list of positions, so I can just use the same list to add and delete values. s
+List of tuples was a bad way to implement the simulation. Tuples are immutable so I am making the particles move by deleting them and making new ones every time. Instead I am going to use a list of positions, so I can just use the same list to add and delete values. 
+
+# 10/18-19/2024
+## Behavior changes
+So I realized why I can't use a barebones list of each particle. Although it does work for plotting a single histogram, things get complicated when I plot the top and bottom line together. To fix this I think I will just go back to calculating proportions for each x-value. 
+
+# 10/21/2024
+## Finishing behavior
+Small issue with new method: 
+    How do I move a particle to another list, and then ignore it when I go to move the other list's particles?
+    Example:
+        If Jump happens, append particle to bottom list, delete from top list
+        Particle is now on the bottom line, and has moved this iteration.
+        Now particle is on the bottom line. When I go to move the particles in there, I see this particle and move it a second time
+        Maybe I will use a temp list for each list so I can add particles to the temp list, but only insert them into the original lists after the end of the iteration.
