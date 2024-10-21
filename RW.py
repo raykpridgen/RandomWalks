@@ -203,7 +203,7 @@ simType = True
 deltaT = 0.5
 timeConst = 10
 diffCon = 1
-bSpin = 0.5
+bSpin = 0
 gamma = 0
 numParticles = 10000
 
