@@ -2,6 +2,41 @@ import numpy as np
 import time
 import math
 import matplotlib.pyplot as plt
+import sys
+
+# Clock time to record when the program starts
+startTime = time.perf_counter()
+
+''' Initialization stage '''
+
+# Parameters
+deltaT = 0.1
+timeConst = 2
+diffCon = 1
+bSpin = 0.25
+gamma = 0
+numParticles = 10000
+
+# Number of iterations the simulation will move the particles through
+# this is sent to int, so if the output is not a whole number it will go to the next smallest integer
+increments = int (timeConst / deltaT)
+
+# X-Value amount that each move L/R will be
+moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
+
+# For drift step, move particles by this value on top of the selected move
+shiftValue = deltaT * bSpin
+
+# Percentage a particle has of jumping lines
+jumpProb = deltaT * gamma
+
+# Lists to hold each series of particles
+topParticlesProb = []
+bottomParticlesProb = []
+topParticlesStep = []
+bottomParticlesStep = []
+
+'''   -----------------   Functions start here   -----------------   '''
 
 # C(x, t) where an x-value and a time step are used to calculate the proportion of particles in this place
 #       x = xAxis     t = iterations        v = b       D = 1   
@@ -9,41 +44,6 @@ def analyticSolution(x, t, v, D=1):
     lead = 1 / math.sqrt(4 * math.pi * D * t)
     exponent = -1 * ((x - (v * t)) ** 2)/(4 * D * t)
     return lead * (math.e ** exponent)
-
-# This is a function to generate a list of the solution values above
-# This takes a list of an x range and the applicable parameters
-def makeSolutionList(xRange, t, v, D=1):
-    returnList = [] # List holds solutions
-    for xVal in xRange: # Iterate through each value on the applicable x-axis 
-        returnList.append(analyticSolution(xVal, t, v, D)) # Append the calculation with parameters
-    return returnList
-
-# This is a function that takes a list of particle frequency lists. 
-# Then uses matplotlib to graph all these functions
-def graphMultipleSeries(plots, title, xlabel, ylabel):
-
-    for plot in plots: # Each list entry is a list of parameters and plots: [xVal, yVal, label, color, alpha, style="Plot"]
-        xRange = plot[0]
-        yValues = plot[1]
-        label = plot[2]
-        color = plot[3]
-        alpha = plot[4]
-        style = plot[5]
-
-        if style == "Bar":
-            plt.bar(xRange, yValues, label=label, color=color, alpha=alpha, width = 0.3)
-        elif style == "Plot":
-            plt.plot(xRange, yValues, label=label, color=color, alpha=alpha)
-        else:
-            print("Error: Style not found. Using default, Bar.\n")
-            plt.bar(xRange, yValues, label=label, color=color, alpha=alpha)
-
-
-    plt.legend()
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.grid(True)
 
 # This is a function that calculates the probability that a particle will move either left or right
 # A sucess is a move right, a failure is a move left. Probabilities are compliment for each line. Top = P Bottom = 1 - P
@@ -58,11 +58,6 @@ def moveCalculation(D, b, deltaT):
     # 2D divided by dt is new, previously did not include dt. 
     else:
         return 0.5 * (1 + (b / math.sqrt(((2*D)/deltaT)+(b**2))))
-
-# This is a function that calculates the actual distance a particle will move when an x-axis move occurs. Takes delta t and the diffusion constant 
-def particleMoveDistance(deltaT, D):
-    # Return 2 times diffusion constant times delta t. 
-    return math.sqrt(2 * D * deltaT)
 
 # This is a function that times the program at different points. Mainly used to make this faster, will use more if parallelism comes in
 def timing(initTime, createTime, moveTime, graphTime, startTime):
@@ -122,7 +117,7 @@ def timing(initTime, createTime, moveTime, graphTime, startTime):
         totalTimeUnit = 'miliseconds'
 
     # Print the details of the timing for this program
-    print("\n\n\n----------------- Timing Details -----------------")
+    print("\n----------------- Timing Details -----------------")
     print(f" Total time elapsed: {totalTime:.2f} {totalTimeUnit}")
     print(f"Initialization time: {initTime:.2f} milliseconds - {initTimeProp:.2f}%")
     print(f"      Creation Time: {createTime:.2f} {createTimeUnit} - {createTimeProp:.2f}%")
@@ -130,97 +125,33 @@ def timing(initTime, createTime, moveTime, graphTime, startTime):
     print(f"      Graphing Time: {graphTime:.2f} {graphTimeUnit} - {graphTimeProp:.2f}%")
     print(f"--------------------------------------------------")
 
-# This function takes a particle as a tuple coordinate, along with the behaviors, then moves part appropriately by returning a new particle
-# Takes the particle as a tuple, probability of jumping to the next line, probability of moving on the x-axis, and the most distance on x-axis
-def moveParticleProb(particle, jumpProb, moveProb, moveDistance):
-    # The simulation models concurrent flow, so the move probability is the compliment of that of the top line
-    if particle[1] == 0: # If particle is on bottom line
-        moveProb = 1 - moveProb # Get compliment of move probability
-    
-    jumpRand = np.random.rand() # Random variable for jumping to another y value (zero or one)
-    if jumpRand < jumpProb: # If jump succeeds, move particle to the other line
-        if particle[1] == 1:
-            return (particle[0], 0)
-        else:
-            return (particle[0], 1)
-
-    else: # If particle jump fails, do a move on the x-axis
-        moveRand = np.random.rand() # Random value for moving to another x coordinate
-        if moveRand < moveProb: # If move succeeds, traverse right
-            return (particle[0] + moveDistance, particle[1])
-        else: # If move fails, traverse left
-            return (particle[0] - moveDistance, particle[1])
-
+# Updated 10/17, now has entirely different functionality
+# Takes a boolean for the line it resides on
+# Returns the value the particle should move by
+def moveParticleProb(isTop=True):
+    if isTop: # If the particle is on the top line
+        moveProb = moveCalculation(diffCon, bSpin, deltaT)
+    else:
+        moveProb = moveCalculation(diffCon, -bSpin, deltaT)
+        
+    if np.random.rand() < moveProb: # If the move succeds
+        return moveDistance
+    else:
+        return -moveDistance
+            
 # This functions is similar to the one above, but it moves particles with a value as drift instead of probability
 # Therefore all particles move with 50/50 L/R, but there is an additional value applied after every move
-def moveParticleStep(particle, jumpProb, shiftVal, moveDistance):
-    # The simulation models concurrent flow, so the move probability is the compliment of that of the top line
-    if particle[1] == 0: # If particle is on bottom line
-        shiftVal = - shiftVal # Get compliment of move
-    
-    jumpRand = np.random.rand() # Random variable for jumping to another y value (zero or one)
-    if jumpRand < jumpProb: # If jump succeeds, move particle to the other line
-        if particle[1] == 1:
-            return (particle[0], 0)
-        else:
-            return (particle[0], 1)
-
-    else: # If particle jump fails, do a move on the x-axis
-        moveRand = np.random.rand() # Random value for moving to another x coordinate
-        if moveRand < 0.5: # If move succeeds, traverse right
-            return (particle[0] + moveDistance + shiftVal, particle[1])
-        else: # If move fails, traverse left
-            return (particle[0] - moveDistance + shiftVal, particle[1])    
-
-# This function moves all the particles in one timestep
-# Takes the full list of particles, drift probability, jump probability, and move distance
-def moveParticles(particleList, jumpProb, LRProb, moveDistance):
-    newList = [] # New list to hold updated particles
-    for particle in particleList: # For each particle
-        newParticle = moveParticleProb(particle, jumpProb, LRProb, moveDistance) # Calculate the new move
-        newList.append(newParticle) # Append the new particle to the new list
-    return newList # Return the list
-
-def moveParticlesStep(particleList, jumpProb, shiftVal, moveDistance):
-    newList = [] # New list to hold updated particles
-    for particle in particleList: # For each particle
-        newParticle = moveParticleStep(particle, jumpProb, shiftVal, moveDistance) # Calculate the new move
-        newList.append(newParticle) # Append the new particle to the new list
-    return newList # Return the list
-
-# Clock time to record when the program starts
-startTime = time.perf_counter()
-
-# This is a boolean to hold the type of simulation to run. 
-# Can be the sim with the drift calculated as probability, or calculated with the added drift amount.
-# Difference is using moveParticleProb vs moveParticleStep
-# True is prob, false is step
-simType = True
-
-''' Initialization stage '''
-
-# Parameters
-deltaT = 0.5
-timeConst = 10
-diffCon = 1
-bSpin = 0
-gamma = 0
-numParticles = 10000
-
-# Behavior of the simulation
-# Number of iterations the simulation will move the particles through
-# this is sent to int, so if the output is not a whole number it will go to the next smallest integer
-increments = int (timeConst / deltaT)
-
-# Distance each particle will move left or right
-moveDistance = particleMoveDistance(deltaT, diffCon)
-# Probability a particle will jump to another line
-jumpProb = deltaT * gamma
-# Probability a particle will move either left or right
-moveProb = moveCalculation(diffCon, bSpin, deltaT)
-
-# List for the particles to be stored in
-particleList = []
+def moveParticleStep(isTop=True):
+    if isTop: # If the particle is on the top line
+        if np.random.rand() < 0.5: # If the random value is less than 50% (success)
+            return shiftValue + moveDistance # Move particle right/positive, top line makes drift positive
+        else: # If the random value is more than 50% (failure)
+            return shiftValue - moveDistance # Move particle left/negative, top line makes drift positive
+    else: # If the particle is on the bottom line
+        if np.random.rand() < 0.5: # If the random value is less than 50% (success)
+            return -shiftValue + moveDistance # Move particle right/positive, bottom line makes drift negative
+        else: # If the random value is more than 50% (failure)
+            return -shiftValue - moveDistance # Move particle right/positive, top line makes drift positive
 
 initTime = time.perf_counter()
 
@@ -228,58 +159,150 @@ initTime = time.perf_counter()
 
 # Create particles
 for i in range(numParticles // 2):
-    particleList.append((0, 1)) # Half the particles start on the top line
+    # Half the particles start on the top line
+    topParticlesProb.append(0)
+    topParticlesStep.append(0)
+'''
 for i in range(numParticles // 2):
-    particleList.append((0, 0)) # Other half start on the bottom line
+    # Other half start on the bottom line
+    bottomParticlesProb.append(0) 
+    bottomParticlesStep.append(0)
+'''
 createTime = time.perf_counter()
 
 # Run simulation through each iteration
-for i in range(int(increments)):
-    particleList = moveParticles(particleList, jumpProb, moveProb, moveDistance) # Change each particle
 
+# Temp lists to add jumped particles to, used for avoiding multiple steps in one iteration. See changes for full description 10/21
+tempTopProb = []
+tempBottomProb = []
+# Run simulation for the first movement style
+for i in range(int(increments)):
+    for index, particle in enumerate(topParticlesProb): # For each particle in the top list
+        if np.random.rand() < jumpProb: # If the particle jumps to another line
+            tempTopProb.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
+        else: # If the particle stays on it's line
+            topParticlesProb[index] += moveParticleProb(True) # Move particle
+    '''
+    for index, particle in enumerate(bottomParticlesProb): # Same behavior for bottom particles
+        if np.random.rand() < jumpProb: # If the particle jumps to another line
+            tempBottomProb.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
+        else: # If the particle stays on it's line
+            bottomParticlesProb[index] += moveParticleProb(False) # Move particle
+    '''
+    # After all particles have been altered, fix the jumped particles by appending temp list to total particles list
+    for item in tempTopProb: # For each particle that jumped this iteration
+        bottomParticlesProb.append(item) # Append it to the other list
+        topParticlesProb.remove(item) # Remove it from the current list
+    '''
+    for item in tempBottomProb: # Same steps for bottom line jumps
+        topParticlesProb.append(item)
+        bottomParticlesProb.remove(item)
+    '''
+    # Clear the lists
+    tempBottomProb = []
+    tempTopProb = []
+
+
+tempTopStep = []
+tempBottomStep = []
+# Run the simulation for the second movement style
+for i in range(int(increments)):
+    for index, particle in enumerate(topParticlesStep): # For each particle in the top list
+        if np.random.rand() < jumpProb: # If the particle jumps to another line
+            tempTopStep.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
+        else: # If the particle stays on it's line
+            topParticlesStep[index] += moveParticleStep(True) # Move particle
+    '''
+    for index, particle in enumerate(bottomParticlesStep): # Same behavior for bottom particles
+        if np.random.rand() < jumpProb: # If the particle jumps to another line
+            tempBottomStep.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
+        else: # If the particle stays on it's line
+            bottomParticlesStep[index] += moveParticleStep(False) # Move particle
+    '''
+    # After all particles have been altered, fix the jumped particles by appending temp list to total particles list
+    for item in tempTopStep: # For each particle that jumped this iteration
+        bottomParticlesStep.append(item) # Append it to the other list
+        topParticlesStep.remove(item) # Remove it from the current list
+    '''
+    for item in tempBottomStep: # Same steps for bottom line jumps
+        topParticlesStep.append(item)
+        bottomParticlesStep.remove(item)
+    '''
+    # Clear the lists
+    tempBottomStep = []
+    tempTopStep = []
+
+def round_near_integers(values, threshold=1e-6):
+    return [
+        round(value, 6) if abs(value - round(value, 6)) < threshold else value
+        for value in values
+    ]
+
+topParticlesProb = round_near_integers(topParticlesProb)
+#bottomParticlesProb = round_near_integers(bottomParticlesProb)
+topParticlesStep = round_near_integers(topParticlesStep)
+#bottomParticlesStep = round_near_integers(bottomParticlesStep)
 moveTime = time.perf_counter()
 
 ''' Graph / prep stage '''
 
-# Initialize lists for x-values and particle counts
-particleRange = [i * moveDistance for i in range(-increments, increments + 1)]
-particlesTop = [0] * len(particleRange)
-particlesBottom = [0] * len(particleRange)
+# Convert to a list then back to a set to get all entries without duplicates
+xValsTopProb = sorted(list(set(topParticlesProb)))
+#xValsBottomProb = sorted(list(set(bottomParticlesProb)))
+xValsTopStep = sorted(list(set(topParticlesStep)))
+#xValsBottomStep = sorted(list(set(bottomParticlesStep)))
 
-# Count the particles on the top and bottom lines
-for particle in particleList:
-    # X value from tuple, remove moveDistance factor by dividing, and then add the number of increments to cancel negative values
-    index = int((particle[0] / moveDistance) + increments)  # Calculate index for x-value
-    # Apply particles to different lists based on line
-    if particle[1] == 1:
-        particlesTop[index] += 1
-    elif particle[1] == 0:
-        particlesBottom[index] += 1
+xFreqTopProb = []
+#xFreqBottomProb = []
+xFreqTopStep = []
+#xFreqBottomStep = []
 
-# Calculate total particles for normalization (Don't crucify me for using this term, I am not sure this is used in the right context)
-# I realize this part may be causing an issue, since the way the proportion can be interpreted two ways:
-# Either number of particles on x / particles on line   OR   number of particles on x / total particles
-topAmount = sum(particlesTop)
-bottomAmount = sum(particlesBottom)
+solTop = []
+#solBottom = []
 
-# Normalize counts to proportions
-particlesTop = [count / topAmount for count in particlesTop]
-particlesBottom = [-count / bottomAmount for count in particlesBottom]
-solTop = makeSolutionList(particleRange, timeConst, bSpin, diffCon)
-solBottom = makeSolutionList(particleRange, timeConst, -bSpin, diffCon)
+# Using those x-values, calculate each solution point
+for item in xValsTopProb:
+    # Appends occurences of given x over total particles, or frequency
+    xFreqTopProb.append(topParticlesProb.count(item) / len(topParticlesProb))
+'''
+for item in xValsBottomProb:
+    xFreqBottomProb.append(-(bottomParticlesProb.count(item)) / len(bottomParticlesProb))
+'''
+for item in xValsTopStep:
+    # Appends occurences of given x over total particles, or frequency
+    xFreqTopStep.append(topParticlesStep.count(item) / len(topParticlesStep))
+'''
+for item in xValsBottomStep:
+    # Appends occurences of given x over total particles, or frequency
+    xFreqBottomStep.append(-(bottomParticlesStep.count(item)) / len(bottomParticlesStep))
+'''
+# make range list for the solution
+#solRange = sorted(list(set(xValsTopProb + xValsBottomProb + xValsTopStep + xValsBottomStep)))
+solRange = sorted(list(set(xValsTopProb + xValsTopStep)))
 
-solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
-solBottom = [-item * (math.sqrt(deltaT * 8)) for item in solBottom]
 
-solTSeries = [particleRange, solTop, "Solution", "black", 1, "Plot"]
-solBSeries = [particleRange, solBottom, "Solution", "black", 1, "Plot"]
-partTSeries = [particleRange, particlesTop, "Top Particles", "blue", 0.5, "Bar"]
-partBSeries = [particleRange, particlesBottom, "Bottom Particles", "red", 0.5, "Bar"]
+for item in solRange:
+        solTop.append(analyticSolution(item, timeConst, bSpin, diffCon))
+        #solBottom.append(-analyticSolution(item, timeConst, -bSpin, diffCon))
 
-seriesList = [solTSeries, solBSeries, partTSeries, partBSeries]
-title = f"{numParticles} Random Walkers Taking {moveDistance:.2f} Sized Steps For {increments} Moves"
 
-graphMultipleSeries(seriesList, title, "X-Value", "Particle Frequency")
+# Apply fudge factor
+#solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
+#solBottom = [item * (math.sqrt(deltaT * 8)) for item in solBottom]
+
+
+# solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
+# solBottom = [-item * (math.sqrt(deltaT * 8)) for item in solBottom]
+plt.bar(xValsTopProb, xFreqTopProb, label="Top Prob", color="red", alpha=0.5, width=0.4)
+#plt.bar(xValsBottomProb, xFreqBottomProb, label="Bottom Prob", color="blue", alpha=0.5, width=0.4)
+plt.bar(xValsTopStep, xFreqTopStep, label="Top Step", color="blue", alpha=0.5, width=0.4)
+#plt.bar(xValsBottomStep, xFreqBottomStep, label="Bottom Step", color="yellow", alpha=0.5, width=0.4)
+plt.plot(solRange, solTop, color="black", alpha=1)
+#plt.plot(solRange, solBottom, label="Solution", color="black", alpha=1)
+plt.legend()
+plt.title(f"{numParticles} Random Walkers taking {moveDistance} size steps for {increments} steps")
+plt.xlabel("X-Value")
+plt.ylabel("Proportion of total particles in this position")
 
 # Time it took to graph the data. Will be the first thing subtracted from the start time to get the total time
 graphTime = time.perf_counter()
@@ -290,11 +313,14 @@ plt.show()
 # Timing function to reflect time invervals of the code
 timing(initTime, createTime, moveTime, graphTime, startTime)
 
+moveProb = moveCalculation(diffCon, bSpin, deltaT)
+
 print("\n\n\n---------------------Behavior---------------------")
 print(f"         Move Distance: {moveDistance}")
 print(f"            Increments: {increments}")
 print(f"                 Drift: {moveProb:.2f}")
 print(f"                  Jump: {jumpProb}")
+print(f"           Shift Value: {shiftValue}")
 print("--------------------------------------------------")
 
 """ 919
