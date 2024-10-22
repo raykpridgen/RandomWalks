@@ -13,7 +13,7 @@ startTime = time.perf_counter()
 deltaT = 0.5
 timeConst = 10
 diffCon = 1
-bSpin = 0
+bSpin = -0.3
 gamma = 0
 numParticles = 100000
 
@@ -44,43 +44,6 @@ def analyticSolution(x, t, v, D=1):
     lead = 1 / math.sqrt(4 * math.pi * D * t)
     exponent = -1 * ((x - (v * t)) ** 2)/(4 * D * t)
     return lead * (math.e ** exponent)
-
-# This is a function to generate a list of the solution values above
-# This takes a list of an x range and the applicable parameters
-def makeSolutionList(xRange, t, v, D=1):
-    returnList = [] # List holds solutions
-    for xVal in xRange: # Iterate through each value on the applicable x-axis 
-        returnList.append(analyticSolution(xVal, t, v, D)) # Append the calculation with parameters
-    return returnList
-
-# This is a function that takes a list of particle frequency lists. 
-# Then uses matplotlib to graph all these functions
-def graphMultipleSeries(plots, title, xlabel, ylabel):
-
-    for plot in plots: # Each list entry is a list of parameters and plots: [xVal, yVal, label, color, alpha, style="Plot"]
-        xRange = plot[0]
-        yValues = plot[1]
-        label = plot[2]
-        color = plot[3]
-        alpha = plot[4]
-        style = plot[5]
-
-        if style == "Bar":
-            plt.bar(xRange, yValues, label=label, color=color, alpha=alpha, width = 0.3)
-        elif style == "Plot":
-            plt.plot(xRange, yValues, label=label, color=color, alpha=alpha)
-        elif style == "Hist":
-            plt.hist(xRange, bins=yValues, label=label, color=color, alpha=alpha)
-        else:
-            print("Error: Style not found. Using default, Bar.\n")
-            plt.bar(xRange, yValues, label=label, color=color, alpha=alpha)
-
-
-    plt.legend()
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.grid(True)
 
 # This is a function that calculates the probability that a particle will move either left or right
 # A sucess is a move right, a failure is a move left. Probabilities are compliment for each line. Top = P Bottom = 1 - P
@@ -154,7 +117,7 @@ def timing(initTime, createTime, moveTime, graphTime, startTime):
         totalTimeUnit = 'miliseconds'
 
     # Print the details of the timing for this program
-    print("\n\n\n----------------- Timing Details -----------------")
+    print("\n----------------- Timing Details -----------------")
     print(f" Total time elapsed: {totalTime:.2f} {totalTimeUnit}")
     print(f"Initialization time: {initTime:.2f} milliseconds - {initTimeProp:.2f}%")
     print(f"      Creation Time: {createTime:.2f} {createTimeUnit} - {createTimeProp:.2f}%")
@@ -237,50 +200,103 @@ for i in range(int(increments)):
     tempTopProb = []
 
 
+tempTopStep = []
+tempBottomStep = []
+# Run the simulation for the second movement style
+for i in range(int(increments)):
+    for index, particle in enumerate(topParticlesStep): # For each particle in the top list
+        if np.random.rand() < jumpProb: # If the particle jumps to another line
+            tempTopStep.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
+        else: # If the particle stays on it's line
+            topParticlesStep[index] += moveParticleStep(True) # Move particle
+
+    for index, particle in enumerate(bottomParticlesStep): # Same behavior for bottom particles
+        if np.random.rand() < jumpProb: # If the particle jumps to another line
+            tempBottomStep.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
+        else: # If the particle stays on it's line
+            bottomParticlesStep[index] += moveParticleStep(False) # Move particle
+    
+    # After all particles have been altered, fix the jumped particles by appending temp list to total particles list
+    for item in tempTopStep: # For each particle that jumped this iteration
+        bottomParticlesStep.append(item) # Append it to the other list
+        topParticlesStep.remove(item) # Remove it from the current list
+    for item in tempBottomStep: # Same steps for bottom line jumps
+        topParticlesStep.append(item)
+        bottomParticlesStep.remove(item)
+    # Clear the lists
+    tempBottomStep = []
+    tempTopStep = []
+
+def round_near_integers(values, threshold=1e-10):
+    return [
+        round(value) if abs(value - round(value)) < threshold else value
+        for value in values
+    ]
+
+topParticlesStep = round_near_integers(topParticlesStep)
+bottomParticlesStep = round_near_integers(bottomParticlesStep)
 moveTime = time.perf_counter()
 
 ''' Graph / prep stage '''
 
 # Convert to a list then back to a set to get all entries without duplicates
-xValsTop = sorted(list(set(topParticlesProb)))
-xValsBottom = sorted(list(set(bottomParticlesProb)))
+xValsTopProb = sorted(list(set(topParticlesProb)))
+xValsBottomProb = sorted(list(set(bottomParticlesProb)))
+xValsTopStep = sorted(list(set(topParticlesStep)))
+xValsBottomStep = sorted(list(set(bottomParticlesStep)))
 
-xFreqTop = []
-xFreqBottom = []
+
+xFreqTopProb = []
+xFreqBottomProb = []
+xFreqTopStep = []
+xFreqBottomStep = []
 
 solTop = []
 solBottom = []
 
 # Using those x-values, calculate each solution point
-for item in xValsTop:
+for item in xValsTopProb:
     # Appends occurences of given x over total particles, or frequency
-    xFreqTop.append(topParticlesProb.count(item) / len(topParticlesProb))
-    solTop.append(analyticSolution(item, timeConst, bSpin, diffCon))
-for item in xValsBottom:
-    solBottom.append(-analyticSolution(item, timeConst, -bSpin, diffCon))
-    xFreqBottom.append(-(bottomParticlesProb.count(item)) / len(bottomParticlesProb))
+    xFreqTopProb.append(topParticlesProb.count(item) / len(topParticlesProb))
 
+for item in xValsBottomProb:
+    xFreqBottomProb.append(-(bottomParticlesProb.count(item)) / len(bottomParticlesProb))
+
+for item in xValsTopStep:
+    # Appends occurences of given x over total particles, or frequency
+    xFreqTopStep.append(topParticlesStep.count(item) / len(topParticlesStep))
+
+for item in xValsBottomStep:
+    # Appends occurences of given x over total particles, or frequency
+    xFreqBottomStep.append(-(bottomParticlesStep.count(item)) / len(bottomParticlesStep))
+
+# make range list for the solution
+solRange = sorted(list(set(xValsTopProb + xValsBottomProb + xValsTopStep + xValsBottomStep)))
+
+
+for item in solRange:
+        solTop.append(analyticSolution(item, timeConst, bSpin, diffCon))
+        solBottom.append(-analyticSolution(item, timeConst, -bSpin, diffCon))
+
+
+# Apply fudge factor
+solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
+solBottom = [item * (math.sqrt(deltaT * 8)) for item in solBottom]
 
 
 # solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
 # solBottom = [-item * (math.sqrt(deltaT * 8)) for item in solBottom]
-plt.bar(xValsTop, xFreqTop)
-plt.bar(xValsBottom, xFreqBottom)
-plt.plot(xValsTop, solTop)
-plt.plot(xValsBottom, solBottom)
-plt.show()
-sys.exit()
+plt.bar(xValsTopProb, xFreqTopProb, label="Top Prob", color="red", alpha=0.5, width=0.4)
+plt.bar(xValsBottomProb, xFreqBottomProb, label="Bottom Prob", color="blue", alpha=0.5, width=0.4)
+plt.bar(xValsTopStep, xFreqTopStep, label="Top Step", color="blue", alpha=0.5, width=0.4)
+plt.bar(xValsBottomStep, xFreqBottomStep, label="Bottom Step", color="yellow", alpha=0.5, width=0.4)
+plt.plot(solRange, solTop, color="black", alpha=1)
+plt.plot(solRange, solBottom, label="Solution", color="black", alpha=1)
+plt.legend()
+plt.title(f"{numParticles} Random Walkers taking {moveDistance} size steps for {increments} steps")
+plt.xlabel("X-Value")
+plt.ylabel("Proportion of total particles in this position")
 
-
-solTSeries = [xValsTop, solTop, "Solution", "black", 1, "Plot"]
-solBSeries = [xValsBottom, solBottom, "Solution", "black", 1, "Plot"]
-partTSeries = [xValsTop, xFreqTop, "Top Particles", "blue", 0.5, "Bar"]
-partBSeries = [xValsBottom, xFreqBottom, "Bottom Particles", "red", 0.5, "Bar"]
-
-seriesList = [partTSeries, partBSeries, solTSeries, solBSeries]
-title = f"{numParticles} Random Walkers Taking {moveDistance:.2f} Sized Steps For {increments} Moves"
-
-graphMultipleSeries(seriesList, title, "X-Value", "Particle Frequency")
 # Time it took to graph the data. Will be the first thing subtracted from the start time to get the total time
 graphTime = time.perf_counter()
 
@@ -297,6 +313,7 @@ print(f"         Move Distance: {moveDistance}")
 print(f"            Increments: {increments}")
 print(f"                 Drift: {moveProb:.2f}")
 print(f"                  Jump: {jumpProb}")
+print(f"           Shift Value: {shiftValue}")
 print("--------------------------------------------------")
 
 """ 919
