@@ -11,7 +11,7 @@ startTime = time.perf_counter()
 
 # Parameters
 deltaT = 0.1
-timeConst = 100
+timeConst = 2
 diffCon = 1
 bSpin = 0.25
 gamma = 0
@@ -162,11 +162,12 @@ for i in range(numParticles // 2):
     # Half the particles start on the top line
     topParticlesProb.append(0)
     topParticlesStep.append(0)
+'''
 for i in range(numParticles // 2):
     # Other half start on the bottom line
     bottomParticlesProb.append(0) 
     bottomParticlesStep.append(0)
-
+'''
 createTime = time.perf_counter()
 
 # Run simulation through each iteration
@@ -181,20 +182,22 @@ for i in range(int(increments)):
             tempTopProb.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
         else: # If the particle stays on it's line
             topParticlesProb[index] += moveParticleProb(True) # Move particle
-
+    '''
     for index, particle in enumerate(bottomParticlesProb): # Same behavior for bottom particles
         if np.random.rand() < jumpProb: # If the particle jumps to another line
             tempBottomProb.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
         else: # If the particle stays on it's line
             bottomParticlesProb[index] += moveParticleProb(False) # Move particle
-    
+    '''
     # After all particles have been altered, fix the jumped particles by appending temp list to total particles list
     for item in tempTopProb: # For each particle that jumped this iteration
         bottomParticlesProb.append(item) # Append it to the other list
         topParticlesProb.remove(item) # Remove it from the current list
+    '''
     for item in tempBottomProb: # Same steps for bottom line jumps
         topParticlesProb.append(item)
         bottomParticlesProb.remove(item)
+    '''
     # Clear the lists
     tempBottomProb = []
     tempTopProb = []
@@ -209,20 +212,22 @@ for i in range(int(increments)):
             tempTopStep.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
         else: # If the particle stays on it's line
             topParticlesStep[index] += moveParticleStep(True) # Move particle
-
+    '''
     for index, particle in enumerate(bottomParticlesStep): # Same behavior for bottom particles
         if np.random.rand() < jumpProb: # If the particle jumps to another line
             tempBottomStep.append(particle) # Append it to the temp list, wait to add to other line until end of iteration
         else: # If the particle stays on it's line
             bottomParticlesStep[index] += moveParticleStep(False) # Move particle
-    
+    '''
     # After all particles have been altered, fix the jumped particles by appending temp list to total particles list
     for item in tempTopStep: # For each particle that jumped this iteration
         bottomParticlesStep.append(item) # Append it to the other list
         topParticlesStep.remove(item) # Remove it from the current list
+    '''
     for item in tempBottomStep: # Same steps for bottom line jumps
         topParticlesStep.append(item)
         bottomParticlesStep.remove(item)
+    '''
     # Clear the lists
     tempBottomStep = []
     tempTopStep = []
@@ -233,74 +238,67 @@ def round_near_integers(values, threshold=1e-6):
         for value in values
     ]
 
-print(topParticlesProb)
-print("\n\n")
 topParticlesProb = round_near_integers(topParticlesProb)
-bottomParticlesProb = round_near_integers(bottomParticlesProb)
+#bottomParticlesProb = round_near_integers(bottomParticlesProb)
 topParticlesStep = round_near_integers(topParticlesStep)
-bottomParticlesStep = round_near_integers(bottomParticlesStep)
+#bottomParticlesStep = round_near_integers(bottomParticlesStep)
 moveTime = time.perf_counter()
-
-print(topParticlesProb)
-print("\n\n")
 
 ''' Graph / prep stage '''
 
 # Convert to a list then back to a set to get all entries without duplicates
 xValsTopProb = sorted(list(set(topParticlesProb)))
-xValsBottomProb = sorted(list(set(bottomParticlesProb)))
+#xValsBottomProb = sorted(list(set(bottomParticlesProb)))
 xValsTopStep = sorted(list(set(topParticlesStep)))
-xValsBottomStep = sorted(list(set(bottomParticlesStep)))
-
-print(xValsTopProb)
-print("\n\n")
+#xValsBottomStep = sorted(list(set(bottomParticlesStep)))
 
 xFreqTopProb = []
-xFreqBottomProb = []
+#xFreqBottomProb = []
 xFreqTopStep = []
-xFreqBottomStep = []
+#xFreqBottomStep = []
 
 solTop = []
-solBottom = []
+#solBottom = []
 
 # Using those x-values, calculate each solution point
 for item in xValsTopProb:
     # Appends occurences of given x over total particles, or frequency
     xFreqTopProb.append(topParticlesProb.count(item) / len(topParticlesProb))
-
+'''
 for item in xValsBottomProb:
     xFreqBottomProb.append(-(bottomParticlesProb.count(item)) / len(bottomParticlesProb))
-
+'''
 for item in xValsTopStep:
     # Appends occurences of given x over total particles, or frequency
     xFreqTopStep.append(topParticlesStep.count(item) / len(topParticlesStep))
-
+'''
 for item in xValsBottomStep:
     # Appends occurences of given x over total particles, or frequency
     xFreqBottomStep.append(-(bottomParticlesStep.count(item)) / len(bottomParticlesStep))
-
+'''
 # make range list for the solution
-solRange = sorted(list(set(xValsTopProb + xValsBottomProb + xValsTopStep + xValsBottomStep)))
+#solRange = sorted(list(set(xValsTopProb + xValsBottomProb + xValsTopStep + xValsBottomStep)))
+solRange = sorted(list(set(xValsTopProb + xValsTopStep)))
 
 
 for item in solRange:
         solTop.append(analyticSolution(item, timeConst, bSpin, diffCon))
-        solBottom.append(-analyticSolution(item, timeConst, -bSpin, diffCon))
+        #solBottom.append(-analyticSolution(item, timeConst, -bSpin, diffCon))
 
 
 # Apply fudge factor
-solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
-solBottom = [item * (math.sqrt(deltaT * 8)) for item in solBottom]
+#solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
+#solBottom = [item * (math.sqrt(deltaT * 8)) for item in solBottom]
 
 
 # solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
 # solBottom = [-item * (math.sqrt(deltaT * 8)) for item in solBottom]
 plt.bar(xValsTopProb, xFreqTopProb, label="Top Prob", color="red", alpha=0.5, width=0.4)
-plt.bar(xValsBottomProb, xFreqBottomProb, label="Bottom Prob", color="blue", alpha=0.5, width=0.4)
+#plt.bar(xValsBottomProb, xFreqBottomProb, label="Bottom Prob", color="blue", alpha=0.5, width=0.4)
 plt.bar(xValsTopStep, xFreqTopStep, label="Top Step", color="blue", alpha=0.5, width=0.4)
-plt.bar(xValsBottomStep, xFreqBottomStep, label="Bottom Step", color="yellow", alpha=0.5, width=0.4)
+#plt.bar(xValsBottomStep, xFreqBottomStep, label="Bottom Step", color="yellow", alpha=0.5, width=0.4)
 plt.plot(solRange, solTop, color="black", alpha=1)
-plt.plot(solRange, solBottom, label="Solution", color="black", alpha=1)
+#plt.plot(solRange, solBottom, label="Solution", color="black", alpha=1)
 plt.legend()
 plt.title(f"{numParticles} Random Walkers taking {moveDistance} size steps for {increments} steps")
 plt.xlabel("X-Value")
