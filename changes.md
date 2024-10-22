@@ -57,3 +57,12 @@ Small issue with new method:
         Particle is now on the bottom line, and has moved this iteration.
         Now particle is on the bottom line. When I go to move the particles in there, I see this particle and move it a second time
         Maybe I will use a temp list for each list so I can add particles to the temp list, but only insert them into the original lists after the end of the iteration.
+
+
+# 10/22/2024
+## Finished with behavior changes
+I have completed step and move for the new style of keeping particles as values in a list. Simulation works for both ways, and the fudge factor sqrt(8 * dt) may be a result of small step sizes. It appears to go away at large amounts.
+
+## Performance Upgrades
+I need to scale up these simulations. Solution will work better with larger sizes, etc. Right now python works, but it is getting slow around 100,000 walkers and 100,000 steps. To continue to scale up, I think I will make C code to use for the heavy lifting. I can even work with some parallelism if all goes well. I need to make sure to keep all of this to one code, not running back and forth between Python and C. 
+
