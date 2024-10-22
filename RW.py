@@ -10,19 +10,19 @@ startTime = time.perf_counter()
 ''' Initialization stage '''
 
 # Parameters
-deltaT = 0.5
-timeConst = 10
+deltaT = 0.1
+timeConst = 100
 diffCon = 1
-bSpin = -0.3
+bSpin = 0.25
 gamma = 0
-numParticles = 100000
+numParticles = 10000
 
 # Number of iterations the simulation will move the particles through
 # this is sent to int, so if the output is not a whole number it will go to the next smallest integer
 increments = int (timeConst / deltaT)
 
 # X-Value amount that each move L/R will be
-moveDistance = math.sqrt(2 * diffCon * deltaT)
+moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
 
 # For drift step, move particles by this value on top of the selected move
 shiftValue = deltaT * bSpin
@@ -227,15 +227,22 @@ for i in range(int(increments)):
     tempBottomStep = []
     tempTopStep = []
 
-def round_near_integers(values, threshold=1e-10):
+def round_near_integers(values, threshold=1e-6):
     return [
-        round(value) if abs(value - round(value)) < threshold else value
+        round(value, 6) if abs(value - round(value, 6)) < threshold else value
         for value in values
     ]
 
+print(topParticlesProb)
+print("\n\n")
+topParticlesProb = round_near_integers(topParticlesProb)
+bottomParticlesProb = round_near_integers(bottomParticlesProb)
 topParticlesStep = round_near_integers(topParticlesStep)
 bottomParticlesStep = round_near_integers(bottomParticlesStep)
 moveTime = time.perf_counter()
+
+print(topParticlesProb)
+print("\n\n")
 
 ''' Graph / prep stage '''
 
@@ -245,6 +252,8 @@ xValsBottomProb = sorted(list(set(bottomParticlesProb)))
 xValsTopStep = sorted(list(set(topParticlesStep)))
 xValsBottomStep = sorted(list(set(bottomParticlesStep)))
 
+print(xValsTopProb)
+print("\n\n")
 
 xFreqTopProb = []
 xFreqBottomProb = []
