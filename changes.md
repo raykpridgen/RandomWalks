@@ -66,3 +66,19 @@ I have completed step and move for the new style of keeping particles as values 
 ## Performance Upgrades
 I need to scale up these simulations. Solution will work better with larger sizes, etc. Right now python works, but it is getting slow around 100,000 walkers and 100,000 steps. To continue to scale up, I think I will make C code to use for the heavy lifting. I can even work with some parallelism if all goes well. I need to make sure to keep all of this to one code, not running back and forth between Python and C. 
 
+# 10/23/2024
+
+Counter curent exchange
+
+Cocurrent
+
+When Looking at these things 
+D = 0
+
+Big E - shift value in the same direction
+
+G - adding particles over time to get to a steady state
+
+# 10/30/2024
+## Forgot to update this
+## New C program to speed up simulation

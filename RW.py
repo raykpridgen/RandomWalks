@@ -11,7 +11,7 @@ startTime = time.perf_counter()
 
 # Parameters
 deltaT = 0.1
-timeConst = 2
+timeConst = 1000
 diffCon = 1
 bSpin = 0.25
 gamma = 0
@@ -158,7 +158,7 @@ initTime = time.perf_counter()
 ''' Run Stage '''
 
 # Create particles
-for i in range(numParticles // 2):
+for i in range(numParticles):
     # Half the particles start on the top line
     topParticlesProb.append(0)
     topParticlesStep.append(0)
@@ -232,9 +232,9 @@ for i in range(int(increments)):
     tempBottomStep = []
     tempTopStep = []
 
-def round_near_integers(values, threshold=1e-6):
+def round_near_integers(values, threshold=1e-8):
     return [
-        round(value, 6) if abs(value - round(value, 6)) < threshold else value
+        round(value, 8) if abs(value - round(value, 8)) < threshold else value
         for value in values
     ]
 
@@ -287,15 +287,18 @@ for item in solRange:
 
 
 # Apply fudge factor
-#solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
+solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
+solTop = [item * numParticles for item in solTop]
 #solBottom = [item * (math.sqrt(deltaT * 8)) for item in solBottom]
 
 
 # solTop = [item * (math.sqrt(deltaT * 8)) for item in solTop]
 # solBottom = [-item * (math.sqrt(deltaT * 8)) for item in solBottom]
-plt.bar(xValsTopProb, xFreqTopProb, label="Top Prob", color="red", alpha=0.5, width=0.4)
+#plt.bar(xValsTopProb, xFreqTopProb, label="Top Prob", color="red", width=0.2, alpha=0.5)
+plt.hist(topParticlesProb, bins=200, color='red', alpha=0.5)
+plt.hist(topParticlesStep, bins=200, color='blue', alpha=0.5)
 #plt.bar(xValsBottomProb, xFreqBottomProb, label="Bottom Prob", color="blue", alpha=0.5, width=0.4)
-plt.bar(xValsTopStep, xFreqTopStep, label="Top Step", color="blue", alpha=0.5, width=0.4)
+#plt.bar(xValsTopStep, xFreqTopStep, label="Top Step", color="blue", width=0.2, alpha=0.5)
 #plt.bar(xValsBottomStep, xFreqBottomStep, label="Bottom Step", color="yellow", alpha=0.5, width=0.4)
 plt.plot(solRange, solTop, color="black", alpha=1)
 #plt.plot(solRange, solBottom, label="Solution", color="black", alpha=1)
