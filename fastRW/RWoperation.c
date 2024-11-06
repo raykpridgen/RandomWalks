@@ -29,8 +29,6 @@ int main(int argc, char *argv[]) {
 
     srand(time(NULL));
 
-    omp_set_num_threads(omp_get_num_procs());
-
     // Parameters
     float deltaT = atof(argv[1]);
     float timeConst = atof(argv[2]);
@@ -38,7 +36,14 @@ int main(int argc, char *argv[]) {
     float bSpin = atof(argv[4]);
     float gamma = atof(argv[5]);
     int numParticles = atoi(argv[6]);
-    int creationType = atoi(argv[7]);
+    int coresToUse = atoi(argv[7]);
+
+    if (coresToUse > omp_get_num_procs())
+    {
+        printf("Not enough cores. Using max: %d", omp_get_num_procs());
+        coresToUse = omp_get_num_procs();
+    }
+    omp_set_num_threads(coresToUse);
 
     // Behaviors
     float moveDistance = sqrt(2 * diffCon * deltaT);
