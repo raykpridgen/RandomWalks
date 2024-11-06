@@ -29,6 +29,8 @@ int main(int argc, char *argv[]) {
 
     srand(time(NULL));
 
+    omp_set_num_threads(omp_get_num_procs());
+
     // Parameters
     float deltaT = atof(argv[1]);
     float timeConst = atof(argv[2]);
