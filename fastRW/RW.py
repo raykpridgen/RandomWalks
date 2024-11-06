@@ -1,4 +1,4 @@
-import pandas as pd
+import csv
 import matplotlib.pyplot as plt
 import subprocess
 import numpy as np
@@ -11,7 +11,7 @@ timeConst = 1000
 diffCon = 1
 bSpin = 0.15
 gamma = 0
-numParticles = 100000
+numParticles = 10000
 
 increments = int (timeConst / deltaT)
 moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
@@ -24,17 +24,23 @@ runTime = time.perf_counter() - runTime
 
 print(f"Simulation ran in {runTime:.2f} seconds.\n")
 
-# Load the CSV data
-dataProb = pd.read_csv("sims/probSim.csv")
-dataStep = pd.read_csv("sims/stepSim.csv")
+def load_csv_data(filepath):
+    x_top, x_bottom = [], []
+    with open(filepath, mode='r') as file:
+        reader = csv.DictReader(file)  # Automatically handles the header row
+        for row in reader:
+            x_val = float(row['x'])
+            y_val = int(row['y'])
+            if y_val == 1:
+                x_top.append(x_val)
+            else:
+                x_bottom.append(x_val)
+    return x_top, x_bottom
 
-# Separate the x-values based on y-values for prob data
-topValsProb = dataProb[dataProb['y'] == 1]['x']
-bottomValsProb = dataProb[dataProb['y'] == 0]['x']
+# Separate the x-values based on y-values for prob and step data
+topValsProb, bottomValsProb = load_csv_data("sims/probSim.csv")
+topValsStep, bottomValsStep = load_csv_data("sims/stepSim.csv")
 
-# Separate the x-values based on y-values for step data
-topValsStep = dataStep[dataStep['y'] == 1]['x']
-bottomValsStep = dataStep[dataStep['y'] == 0]['x']
 
 # Create the figure
 plt.figure(figsize=(10, 6))
@@ -48,8 +54,8 @@ bin_centers_prob = 0.5 * (bin_edges_prob[1:] + bin_edges_prob[:-1])
 bin_centers_step = 0.5 * (bin_edges_step[1:] + bin_edges_step[:-1])
 
 # Step 2: Plot bar charts for y = 1 (top)
-plt.bar(bin_centers_prob, hist_topProb, width=np.diff(bin_edges_prob), alpha=0.5, color='yellow', label='Probability')
-plt.bar(bin_centers_step, hist_topStep, width=np.diff(bin_edges_step), alpha=0.5, color='green', label='Step')
+plt.bar(bin_centers_prob, hist_topProb, width=np.diff(bin_edges_prob), alpha=0.5, color='green', label='Probability')
+plt.bar(bin_centers_step, hist_topStep, width=np.diff(bin_edges_step), alpha=0.5, color='purple', label='Step')
 
 # Step 3: Compute and plot inverted histograms for y = 0 (bottom)
 hist_bottomProb, bin_edges_bottom_prob = np.histogram(bottomValsProb, bins=200, density=True)
@@ -60,8 +66,8 @@ bin_centers_bottom_prob = 0.5 * (bin_edges_bottom_prob[1:] + bin_edges_bottom_pr
 bin_centers_bottom_step = 0.5 * (bin_edges_bottom_step[1:] + bin_edges_bottom_step[:-1])
 
 # Plot inverted bar charts for y = 0 (bottom)
-plt.bar(bin_centers_bottom_prob, -hist_bottomProb, width=np.diff(bin_edges_bottom_prob), alpha=0.5, color='yellow')
-plt.bar(bin_centers_bottom_step, -hist_bottomStep, width=np.diff(bin_edges_bottom_step), alpha=0.5, color='green')
+plt.bar(bin_centers_bottom_prob, -hist_bottomProb, width=np.diff(bin_edges_bottom_prob), alpha=0.5, color='green')
+plt.bar(bin_centers_bottom_step, -hist_bottomStep, width=np.diff(bin_edges_bottom_step), alpha=0.5, color='purple')
 
 
 def analyticSolution(x, t, v, D=1):    
@@ -70,26 +76,27 @@ def analyticSolution(x, t, v, D=1):
     return lead * (math.e ** exponent)
 
 # top max
-if topValsProb.max() < topValsStep.max():
-    topMax = topValsStep.max()
+if max(topValsProb) < max(topValsStep):
+    topMax = max(topValsStep)
 else:
-    topMax = topValsProb.max()
+    topMax = max(topValsProb)
 # top min
-if topValsProb.min() > topValsStep.min():
-    topMin = topValsStep.min()
+if min(topValsProb) > min(topValsStep):
+    topMin = min(topValsStep)
 else:
-    topMin = topValsProb.min()
+    topMin = min(topValsProb)
 # bottom max
-if bottomValsProb.max() > bottomValsStep.max():
-    bottomMax = bottomValsProb.max()
+if max(bottomValsProb) > max(bottomValsStep):
+    bottomMax = max(bottomValsStep)
 else:
-    bottomMax = bottomValsStep.max()
+    bottomMax = max(bottomValsProb)
 # bottom min
-if bottomValsProb.min() > bottomValsStep.min():
-    bottomMin = bottomValsStep.min()
+if min(bottomValsProb) > min(bottomValsStep):
+    bottomMin = min(bottomValsStep)
 else:
-    bottomMin = bottomValsProb.min()
+    bottomMin = min(bottomValsProb)
 
+print(f"Top: ({topMax}, {topMin})\nBottom: ({bottomMax}, {bottomMin})")
 
 xRangeTop = np.linspace(topMin, topMax, num=int(topMax - topMin))
 xRangeBottom = np.linspace(bottomMin, bottomMax, num=int(bottomMax - bottomMin))

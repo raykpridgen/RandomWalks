@@ -84,7 +84,7 @@ G - adding particles over time to get to a steady state
 ## New C program to speed up simulation
 
 # 11/05/2024
-## I need to make it a point to update this more
+I need to make it a point to update this more
 
 ## C code for simulation
 Simulation now runs much faster, I have it set up to read the number of processors
@@ -96,3 +96,11 @@ Now I can focus on altering the simulation to find out behavior patterns
 
 ## Running cross platorm
 Need to also make sure the executable works in Windows, Linux, and Mac since Harmon and the research computer will be running this
+
+# 11/06/2024
+## GO TO RESEARCH LAB
+Set up sim on computer
+Run larger sims
+
+## Figure out Steady State
+Need to see if I can find a steady system with coupling on
