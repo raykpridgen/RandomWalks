@@ -7,7 +7,7 @@ import time
 
 # Parameters
 deltaT = 0.1
-timeConst = 100
+timeConst = 10
 diffCon = 1
 bSpin = 0.15
 gamma = 0
@@ -18,7 +18,7 @@ coresToUse = 12
 increments = int (timeConst / deltaT)
 moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
 
-runProgram = ['./RWoperation', str(deltaT), str(timeConst), str(diffCon), str(bSpin), str(gamma), str(numParticles), str(coresToUse)]
+runProgram = ['./RWoperation.exe', str(deltaT), str(timeConst), str(diffCon), str(bSpin), str(gamma), str(numParticles), str(coresToUse)]
 
 runTime = time.perf_counter()
 result = subprocess.run(runProgram, capture_output=False)
@@ -98,7 +98,6 @@ if min(bottomValsProb) > min(bottomValsStep):
 else:
     bottomMin = min(bottomValsProb)
 
-print(f"Top: ({topMax}, {topMin})\nBottom: ({bottomMax}, {bottomMin})")
 
 xRangeTop = np.linspace(topMin, topMax, num=int(topMax - topMin))
 xRangeBottom = np.linspace(bottomMin, bottomMax, num=int(bottomMax - bottomMin))

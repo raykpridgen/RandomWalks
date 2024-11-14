@@ -104,3 +104,18 @@ Run larger sims
 
 ## Figure out Steady State
 Need to see if I can find a steady system with coupling on
+
+
+## Seeing Issues with Jones
+Note: CSV takes time as well
+rand() is not thread safe
+
+erand48() is thread safe
+rand_r() as well
+    Seed a separate one each time
+Every thread needs a different seed
+Create an outer block to spawn threads
+Threads are not forked and joined
+Seed each thread differently for different random number
+
+ 

@@ -1,9 +1,18 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
 #include <time.h>
 #include <omp.h>
+#include <stdlib.h>
+
+
+#ifdef __unix__
+#define RANDOM_FUNC erand48
+#define RAND_FUNC rand_r
+#else
+#define RANDOM_FUNC rand
+#define RAND_FUNC rand
+#endif
 
 typedef struct
 {
@@ -23,11 +32,12 @@ void exportParticlesToCSV(Particle particles[], int numParticles, const char *fi
 
 int main(int argc, char *argv[]) {
     if (argc != 8) {
-        printf("Usage: ./RW.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <creationType>\n");
+        printf("Usage: ./RW.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <numCores>\n");
         return 1;
     }
 
-    srand(time(NULL));
+
+    //srand(time(NULL));
 
     // Parameters
     float deltaT = atof(argv[1]);
@@ -38,13 +48,32 @@ int main(int argc, char *argv[]) {
     int numParticles = atoi(argv[6]);
     int coresToUse = atoi(argv[7]);
 
+    // Conditional to set default max if number requested is too high
     if (coresToUse > omp_get_num_procs())
     {
         printf("Not enough cores. Using max: %d", omp_get_num_procs());
         coresToUse = omp_get_num_procs();
     }
+    // Set omp threads to cores requested
     omp_set_num_threads(coresToUse);
 
+    //Seeding threads - to make random numbers thread safe
+    // Declare seed var
+    unsigned int seed;
+    // For threads, using private var seed
+    #pragma omp parallel private(seed)
+    {
+        printf("Threads: %d\n", omp_get_num_threads());
+
+        // Get a custom seed based on time and seed num
+        seed = time(NULL) + omp_get_thread_num();
+        printf("Thread %d has a seed of %d\n", omp_get_thread_num(), seed);
+
+        int randomNumber = erand48(&seed);
+        printf("Random num: %d\n", randomNumber);
+    }
+
+    exit(0);
     // Behaviors
     float moveDistance = sqrt(2 * diffCon * deltaT);
     float increments = floor(timeConst / deltaT);
