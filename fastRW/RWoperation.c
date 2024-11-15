@@ -5,15 +5,6 @@
 #include <omp.h>
 #include <stdlib.h>
 
-
-#ifdef __unix__
-#define RANDOM_FUNC erand48
-#define RAND_FUNC rand_r
-#else
-#define RANDOM_FUNC rand
-#define RAND_FUNC rand
-#endif
-
 typedef struct
 {
     float x;
@@ -86,6 +77,17 @@ int main(int argc, char *argv[]) {
 
     initializeParticles(particleListProb, numParticles);
     initializeParticles(particleListStep, numParticles);
+
+    unsigned short seeds[coresToUse][3];
+    unsigned int baseSeed =(unsigned int)time(NULL);
+
+    #pragma omp parallel
+    {
+        int threadNum = omp_get_thread_num();
+        seeds[threadNum][0] = (unsigned short)(baseSeed + threadNum);
+        seeds[threadNum][1] = (unsigned short)(baseSeed + threadNum) >> 16;
+        seeds[threadNum][2] = (unsigned short)(baseSeed + threadNum) >> 32;
+    }
     
     // Increments
     for(int i=0; i<increments; i++)
@@ -94,6 +96,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel for 
         for(int j=0; j<numParticles; j++)
         {
+            int threadNum = omp_get_thread_num();
             moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance);
         }
         #pragma omp parallel for
