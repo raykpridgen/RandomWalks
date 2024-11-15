@@ -208,17 +208,22 @@ void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float 
 }
 
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename) {
-    FILE *file = fopen(filename, "w");
+
+    FILE *file = fopen(filename, "w"); // Open file for writing
     if (file == NULL) {
         perror("Error opening file");
         return;
     }
 
+    // Write the header
     fprintf(file, "x,y\n");
+
+    // Write the data for each particle
     for (int i = 0; i < numParticles; i++) {
         fprintf(file, "%.2f,%d\n", particles[i].x, particles[i].y);
     }
-    fclose(file);
+
+    fclose(file); // Close the file
 }
 
 float moveProbCalc(float D, float b, float dt) {
