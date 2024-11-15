@@ -7,18 +7,18 @@ import time
 
 # Parameters
 deltaT = 0.1
-timeConst = 100
+timeConst = 1000
 diffCon = 1
 bSpin = 0.15
 gamma = 0
 numParticles = 10000
 
-coresToUse = 8
+coresToUse = 1
 
 increments = int (timeConst / deltaT)
 moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
 
-runProgram = ['./test', str(deltaT), str(timeConst), str(diffCon), str(bSpin), str(gamma), str(numParticles), str(coresToUse)]
+runProgram = ['./testing', str(deltaT), str(timeConst), str(diffCon), str(bSpin), str(gamma), str(numParticles), str(coresToUse)]
 
 runTime = time.perf_counter()
 result = subprocess.run(runProgram, capture_output=False)

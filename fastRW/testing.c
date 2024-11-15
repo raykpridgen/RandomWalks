@@ -56,8 +56,6 @@ int main(int argc, char *argv[]) {
     Particle *particleListProb = malloc(numParticles * sizeof(Particle));
     Particle *particleListStep = malloc(numParticles * sizeof(Particle));
 
-    
-
     initializeParticles(particleListProb, numParticles);
     initializeParticles(particleListStep, numParticles);
     clockTime = clock() - clockTime;
@@ -97,40 +95,50 @@ int main(int argc, char *argv[]) {
     printf("Malloc randoms: %d\n", clockTime);
     clockTime = clock();
 
-    #pragma omp parallel
-    {
-        int thread_num = omp_get_thread_num();
-        unsigned int local_seed = *seeds[thread_num];
+    int i, j;
+    // Precompute random numbers in parallel
+    
+    
+    for (int i = 0; i < increments; i++) {
+        #pragma omp parallel for private(i, j)
+        for (int j = 0; j < numParticles; j++) {
+            unsigned int thread_num = omp_get_thread_num();
+            
+            // Use thread-local seed
+            unsigned int local_seed = seeds[thread_num][0];
+            
+            // Update the seed for the next call
+            seeds[thread_num][0] = (unsigned short)(local_seed + 1);
 
-        for (int i = 0; i < increments; i++) {
-            for (int j = 0; j < numParticles; j++) {
-                randomNumbers[i][4 * j + 0] = (float)rand_r(&local_seed) / RAND_MAX;
-                randomNumbers[i][4 * j + 1] = (float)rand_r(&local_seed) / RAND_MAX;
-                randomNumbers[i][4 * j + 2] = (float)rand_r(&local_seed) / RAND_MAX;
-                randomNumbers[i][4 * j + 3] = (float)rand_r(&local_seed) / RAND_MAX;
-            }
+            // Generate random numbers for each particle using rand_r
+            randomNumbers[j][4 * i + 0] = (float)rand_r(&local_seed) / RAND_MAX;
+            randomNumbers[j][4 * i + 1] = (float)rand_r(&local_seed) / RAND_MAX;
+            randomNumbers[j][4 * i + 2] = (float)rand_r(&local_seed) / RAND_MAX;
+            randomNumbers[j][4 * i + 3] = (float)rand_r(&local_seed) / RAND_MAX;
+            
+            // Update the seed for the next random number generation
+            seeds[thread_num][0] = (unsigned short)(local_seed);
         }
     }
+
 
     clockTime = clock() - clockTime;
     printf("Precompute randoms: %d\n", clockTime);
     clockTime = clock();
 
+    // Particle movement: parallelize per iteration
     for (int i = 0; i < increments; i++) {
         #pragma omp parallel for schedule(dynamic, 500)
         for (int j = 0; j < numParticles; j++) {
-            int thread_num = omp_get_thread_num();
-            //printf("Thread acting: %d\n", thread_num);
-            float jumpRand = randomNumbers[i][4 * j + 0];  
-            float moveRand = randomNumbers[i][4 * j + 1];  
+            float jumpRand = randomNumbers[j][4 * i + 0];  
+            float moveRand = randomNumbers[j][4 * i + 1];  
             moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance, jumpRand, moveRand);
         }
 
         #pragma omp parallel for schedule(dynamic, 500)
         for (int j = 0; j < numParticles; j++) {
-            int thread_num = omp_get_thread_num();
-            float jumpRand = randomNumbers[i][4 * j + 2];  
-            float moveRand = randomNumbers[i][4 * j + 3]; 
+            float jumpRand = randomNumbers[j][4 * i + 2];  
+            float moveRand = randomNumbers[j][4 * i + 3]; 
             moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance, jumpRand, moveRand);
         }
     }
@@ -171,9 +179,9 @@ void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float 
             moveProb = 1 - moveProb;
         }
         if (moveRand < moveProb) {
-            particle->x += moveDistance;
+            particle->x = particle->x + moveDistance;
         } else {
-            particle->x -= moveDistance;
+            particle->x = particle->x - moveDistance;
         }
     }
 }
