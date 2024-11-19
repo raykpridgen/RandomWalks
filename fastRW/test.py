@@ -1,26 +1,24 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <omp.h>
-#include <time.h>
+#include <stdbool.h>
 #include <math.h>
+#include <time.h>
+#include <omp.h>
+#include <stdlib.h>
 
 typedef struct {
     float x;
     int y;
-    char padding[56];
 } Particle;
 
 float moveProbCalc(float D, float b, float dt);
-void initializeParticles(Particle partList[], int numParts);
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance, float jumpRand, float moveRand);
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance, float jumpRand, float moveRand);
-void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
 
-void generateRandomNumbers(float *randomNumbers, int size, unsigned short seed[3]) {
-    for (int i = 0; i < size; i++) {
-        randomNumbers[i] = erand48(seed);
-    }
-}
+void initializeParticles(Particle partList[], int numParts);
+
+void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance, unsigned short seed[]);
+
+void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance, unsigned short seed[]);
+
+void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
 
 int main(int argc, char *argv[]) {
     if (argc != 8) {
@@ -28,7 +26,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Parse arguments
+    // Parameters
     float deltaT = atof(argv[1]);
     float timeConst = atof(argv[2]);
     float diffCon = atof(argv[3]);
@@ -38,81 +36,55 @@ int main(int argc, char *argv[]) {
     int coresToUse = atoi(argv[7]);
 
     if (coresToUse > omp_get_num_procs()) {
-        printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
+        printf("Not enough cores. Using max: %d", omp_get_num_procs());
         coresToUse = omp_get_num_procs();
     }
-
     omp_set_num_threads(coresToUse);
 
     float moveDistance = sqrt(2 * diffCon * deltaT);
-    int increments = (int)floor(timeConst / deltaT);
+    float increments = floor(timeConst / deltaT);
     float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
     float jumpProb = gamma * deltaT;
     float shiftValue = deltaT * bSpin;
 
-    // Initialize particles
     Particle *particleListProb = malloc(numParticles * sizeof(Particle));
     Particle *particleListStep = malloc(numParticles * sizeof(Particle));
 
-    if (!particleListProb || !particleListStep) {
-        fprintf(stderr, "Memory allocation failed for particles\n");
-        return 1;
-    }
-
     initializeParticles(particleListProb, numParticles);
     initializeParticles(particleListStep, numParticles);
+    
+    unsigned short seeds[omp_get_max_threads()][3];  // Array of seeds for each thread
+    unsigned int base_seed = (unsigned int)time(NULL);
 
-    // Random number generation
-    unsigned short seed[3] = { (unsigned short)time(NULL), (unsigned short)rand(), (unsigned short)rand() };
-
-    // Allocate memory for a single increment's random numbers
-    int randomBlockSize = numParticles * 4; // Four random numbers per particle
-    float *randomNumbers = malloc(randomBlockSize * sizeof(float));
-    if (!randomNumbers) {
-        fprintf(stderr, "Memory allocation failed for random numbers\n");
-        free(particleListProb);
-        free(particleListStep);
-        return 1;
+    // Initialize thread-local seeds with unique values
+    #pragma omp parallel
+    {
+        int thread_num = omp_get_thread_num();
+        seeds[thread_num][0] = (unsigned short)(base_seed + thread_num);
+        seeds[thread_num][1] = (unsigned short)((base_seed + thread_num) >> 16);
+        seeds[thread_num][2] = (unsigned short)((base_seed + thread_num) >> 32);
     }
-
-    printf("Starting simulation...\n");
-    double startTime = omp_get_wtime();
 
     for (int i = 0; i < increments; i++) {
-        generateRandomNumbers(randomNumbers, randomBlockSize, seed);
-
-        #pragma omp parallel for schedule(dynamic, 500)
+        #pragma omp parallel for
         for (int j = 0; j < numParticles; j++) {
-            int idx = j * 4;
-            moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance, randomNumbers[idx], randomNumbers[idx + 1]);
+            int thread_num = omp_get_thread_num();
+            moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance, seeds[thread_num]);
         }
 
-        #pragma omp parallel for schedule(dynamic, 500)
+        #pragma omp parallel for
         for (int j = 0; j < numParticles; j++) {
-            int idx = j * 4;
-            moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance, randomNumbers[idx + 2], randomNumbers[idx + 3]);
+            int thread_num = omp_get_thread_num();
+            moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance, seeds[thread_num]);
         }
     }
 
-    double endTime = omp_get_wtime();
-    printf("Simulation completed in %.2f seconds\n", endTime - startTime);
-
-    // Export data to CSV
-    printf("Exporting data...\n");
     exportParticlesToCSV(particleListProb, numParticles, "sims/probSim.csv");
     exportParticlesToCSV(particleListStep, numParticles, "sims/stepSim.csv");
 
-    // Free allocated memory
-    free(randomNumbers);
     free(particleListProb);
     free(particleListStep);
-
-    return 0;
 }
-
-// Definitions for helper functions remain the same
-
-
 
 void initializeParticles(Particle partList[], int numParts) {
     for (int i = 0; i < floor(numParts / 2); i++) {
@@ -125,15 +97,17 @@ void initializeParticles(Particle partList[], int numParts) {
     }
 }
 
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance, float jumpRand, float moveRand) {
-    if (jumpRand < jumpProb) {
+void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance, unsigned short seed[]) {
+    float randJump = (float)erand48(seed);
+    if (randJump < jumpProb) {
         particle->y = (particle->y == 0) ? 1 : 0;
         return;
     } else {
         if (particle->y == 0) {
             moveProb = 1 - moveProb;
         }
-        if (moveRand < moveProb) {
+        float randMove = (float)erand48(seed);
+        if (randMove < moveProb) {
             particle->x += moveDistance;
         } else {
             particle->x -= moveDistance;
@@ -141,22 +115,24 @@ void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float 
     }
 }
 
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance, float jumpRand, float moveRand) {
-    if (jumpRand < jumpProb) {
+void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance, unsigned short seed[]) {
+    float randJump = (float)erand48(seed);
+    if (randJump < jumpProb) {
         particle->y = (particle->y == 0) ? 1 : 0;
         return;
     } else {
+        float moveRand = (float)erand48(seed);
         if (particle->y == 1) {
             if (moveRand < 0.5) {
-                particle->x = particle->x + moveDistance + driftVal;
+                particle->x += moveDistance + driftVal;
             } else {
-                particle->x = particle->x - moveDistance + driftVal;
+                particle->x -= moveDistance + driftVal;
             }
         } else {
             if (moveRand < 0.5) {
-                particle->x = particle->x + moveDistance - driftVal;
+                particle->x += moveDistance - driftVal;
             } else {
-                particle->x = particle->x - moveDistance - driftVal;
+                particle->x -= moveDistance - driftVal;
             }
         }
     }

@@ -118,4 +118,14 @@ Create an outer block to spawn threads
 Threads are not forked and joined
 Seed each thread differently for different random number
 
- 
+# 11/16/2024
+Forgot to update for a while. I have a couple working versions of a parallelized C code, right now I am just tyring to figure out which one works the best. 
+
+## Parallelization Options
+Need to solve the bottleneck of the random function.
+This comes with several factors, including worrying about storage of precomputed numbers
+
+## rand_r()
+
+
+## erand_48()

@@ -7,13 +7,13 @@ import time
 
 # Parameters
 deltaT = 0.1
-timeConst = 1000
+timeConst = 100
 diffCon = 1
 bSpin = 0.15
 gamma = 0
-numParticles = 100000
+numParticles = 10000
 
-coresToUse = 1
+coresToUse = 8
 
 increments = int (timeConst / deltaT)
 moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
