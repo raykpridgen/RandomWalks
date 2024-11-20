@@ -13,12 +13,12 @@ bSpin = 0.45
 gamma = 0
 numParticles = 100000
 
-coresToUse = 4
+coresToUse = 1
 
 increments = int (timeConst / deltaT)
 moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
 
-runProgram = ['./test', str(deltaT), str(timeConst), str(diffCon), str(bSpin), str(gamma), str(numParticles), str(coresToUse)]
+runProgram = ['./testing', str(deltaT), str(timeConst), str(diffCon), str(bSpin), str(gamma), str(numParticles), str(coresToUse)]
 
 runTime = time.perf_counter()
 result = subprocess.run(runProgram, capture_output=False)

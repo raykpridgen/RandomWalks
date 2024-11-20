@@ -129,3 +129,7 @@ This comes with several factors, including worrying about storage of precomputed
 
 
 ## erand_48()
+
+# 11/19/2024
+## Went to computer lab to run large sims
+I am now testing several working versions of the code to see which is the best. 
