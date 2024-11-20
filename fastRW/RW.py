@@ -13,7 +13,7 @@ bSpin = 0.45
 gamma = 0
 numParticles = 100000
 
-coresToUse = 1
+coresToUse = 4
 
 increments = int (timeConst / deltaT)
 moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
@@ -99,8 +99,8 @@ else:
     bottomMin = min(bottomValsProb)
 
 
-xRangeTop = np.linspace(topMin, topMax, num=int(topMax - topMin))
-xRangeBottom = np.linspace(bottomMin, bottomMax, num=int(bottomMax - bottomMin))
+xRangeTop = np.linspace(topMin, topMax, num=1000)
+xRangeBottom = np.linspace(bottomMin, bottomMax, num=1000)
                         
 yRangeTop = []
 yRangeBottom = []
