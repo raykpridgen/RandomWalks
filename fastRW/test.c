@@ -114,7 +114,8 @@ void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float 
         particle->y = (particle->y == 0) ? 1 : 0;
         return;
     } else {
-        unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;        float moveRand = rng(&seed);
+        unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;        
+        float moveRand = rng(&seed);
         if (particle->y == 0) {
             moveProb = 1 - moveProb;
         }
@@ -127,12 +128,14 @@ void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float 
 }
 
 void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance) {
-    unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;    float jumpRand = rng(&seed);
+    unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;    
+    float jumpRand = rng(&seed);
     if (jumpRand < jumpProb) {
         particle->y = (particle->y == 0) ? 1 : 0;
         return;
     } else {
-        unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;        float moveRand = rng(&seed);
+        unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;        
+        float moveRand = rng(&seed);
         if (particle->y == 1) {
             if (moveRand < 0.5) {
                 particle->x = particle->x + moveDistance + driftVal;
