@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
         seed = time(NULL) + omp_get_thread_num();
         printf("Thread %d has a seed of %d\n", omp_get_thread_num(), seed);
 
-        int randomNumber = erand48(&seed);
+        int randomNumber = erand_48(&seed);
         printf("Random num: %d\n", randomNumber);
     }
 

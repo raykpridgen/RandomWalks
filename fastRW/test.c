@@ -3,26 +3,32 @@
 #include <math.h>
 #include <time.h>
 #include <omp.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <float.h>
+#include <limits.h>
 
 typedef struct {
     float x;
     int y;
-    char padding[56]; // Avoid false sharing
 } Particle;
 
 float moveProbCalc(float D, float b, float dt);
 void initializeParticles(Particle partList[], int numParts);
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance, float jumpRand, float moveRand);
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance, float jumpRand, float moveRand);
+void moveParticleProb(Particle *particle, float jumpProb, float driftVal, float moveDistance);
+void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance);
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
+float rng(unsigned long long int *state);
+unsigned long long int get_time_seed();
+unsigned long long int int_pow(unsigned long long int base, unsigned int exp);
+
+
 
 int main(int argc, char *argv[]) {
     if (argc != 8) {
-        printf("Usage: ./RW.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <numCores>\n");
+        printf("Usage: ./RWoperation.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <numCores>\n");
         return 1;
     }
-
     double startTime = omp_get_wtime();
     
     // Parameters
@@ -58,43 +64,21 @@ int main(int argc, char *argv[]) {
     initializeParticles(particleListProb, numParticles);
     initializeParticles(particleListStep, numParticles);
 
-    // Allocate random number array
-    float *randomNumbers = malloc(numParticles * increments * 4 * sizeof(float));
-    if (!randomNumbers) {
-        fprintf(stderr, "Memory allocation failed for random numbers\n");
-        free(particleListProb);
-        free(particleListStep);
-        return 1;
-    }
-
-    // Precompute random numbers
-    printf("Precomputing random numbers...\n");
-    #pragma omp parallel
-    {
-        unsigned short seed[3] = { (unsigned short)time(NULL) + omp_get_thread_num(),
-                                   (unsigned short)rand(),
-                                   (unsigned short)rand() };
-
-        #pragma omp for
-        for (int i = 0; i < numParticles * increments * 4; i++) {
-            randomNumbers[i] = erand48(seed); // High-quality random float in [0,1)
-        }
-    }
-    
     printf("Starting simulation...\n");
     double simStart = omp_get_wtime();
     
+    // Increments are set here
     for (int i = 0; i < increments; i++) {
-        #pragma omp parallel for schedule(dynamic, 500)
+        // First version of movement
+        #pragma omp parallel for
         for (int j = 0; j < numParticles; j++) {
-            int idx = (i * numParticles + j) * 4;
-            moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance, randomNumbers[idx], randomNumbers[idx + 1]);
+            moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance);
         }
 
-        #pragma omp parallel for schedule(dynamic, 500)
+        // Second version
+        #pragma omp parallel for
         for (int j = 0; j < numParticles; j++) {
-            int idx = (i * numParticles + j) * 4;
-            moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance, randomNumbers[idx + 2], randomNumbers[idx + 3]);
+            moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance);
         }
     }
 
@@ -107,13 +91,10 @@ int main(int argc, char *argv[]) {
 
     free(particleListProb);
     free(particleListStep);
-    free(randomNumbers);
+
     printf("Total time: %.2f seconds\n", omp_get_wtime() - startTime);
     return 0;
 }
-
-// Helper functions remain unchanged
-
 
 void initializeParticles(Particle partList[], int numParts) {
     for (int i = 0; i < floor(numParts / 2); i++) {
@@ -126,11 +107,14 @@ void initializeParticles(Particle partList[], int numParts) {
     }
 }
 
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance, float jumpRand, float moveRand) {
+void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance) {
+    unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;
+    float jumpRand = rng(&seed);
     if (jumpRand < jumpProb) {
         particle->y = (particle->y == 0) ? 1 : 0;
         return;
     } else {
+        unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;        float moveRand = rng(&seed);
         if (particle->y == 0) {
             moveProb = 1 - moveProb;
         }
@@ -142,11 +126,13 @@ void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float 
     }
 }
 
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance, float jumpRand, float moveRand) {
+void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance) {
+    unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;    float jumpRand = rng(&seed);
     if (jumpRand < jumpProb) {
         particle->y = (particle->y == 0) ? 1 : 0;
         return;
     } else {
+        unsigned long long int seed = int_pow((42677 * get_time_seed()), (omp_get_thread_num() + 3)) % 1844674407351615;        float moveRand = rng(&seed);
         if (particle->y == 1) {
             if (moveRand < 0.5) {
                 particle->x = particle->x + moveDistance + driftVal;
@@ -181,6 +167,34 @@ float moveProbCalc(float D, float b, float dt) {
     if (D == 0 && b == 0) {
         return 0.5;
     } else {
-        return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b))));
+        return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b)))); 
     }
+}
+
+unsigned long long int get_time_seed()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return ts.tv_nsec;  // Use the nanoseconds part as the seed
+}
+
+float rng(unsigned long long int *state)
+{
+    *state = *state ^ *state << 23; 
+    *state = *state ^ *state >> 31; 
+    *state = *state ^ *state << 9; 
+    //printf("Final state: %llx\nFltMax: %f\n", *state, (float)ULLONG_MAX);
+    return (float)(*state) / (float)(ULLONG_MAX);
+}
+
+unsigned long long int int_pow(unsigned long long int base, unsigned int exp) {
+    unsigned long long int result = 1;
+    while (exp) {
+        if (exp % 2 == 1) {
+            result *= base;
+        }
+        base *= base;
+        exp /= 2;
+    }
+    return result;
 }

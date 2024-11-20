@@ -7,13 +7,13 @@ import time
 
 # Parameters
 deltaT = 0.1
-timeConst = 1000
+timeConst = 100
 diffCon = 1
-bSpin = 0.15
+bSpin = 0.45
 gamma = 0
 numParticles = 100000
 
-coresToUse = 1
+coresToUse = 4
 
 increments = int (timeConst / deltaT)
 moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
@@ -57,7 +57,7 @@ bin_centers_step = 0.5 * (bin_edges_step[1:] + bin_edges_step[:-1])
 
 # Step 2: Plot bar charts for y = 1 (top)
 plt.bar(bin_centers_prob, hist_topProb, width=np.diff(bin_edges_prob), alpha=0.5, color='green', label='Probability')
-plt.bar(bin_centers_step, hist_topStep, width=np.diff(bin_edges_step), alpha=0.5, color='purple', label='Step')
+plt.bar(bin_centers_step, hist_topStep, width=np.diff(bin_edges_step), alpha=0.5, color='red', label='Step')
 
 # Step 3: Compute and plot inverted histograms for y = 0 (bottom)
 hist_bottomProb, bin_edges_bottom_prob = np.histogram(bottomValsProb, bins=200, density=True)
@@ -69,7 +69,7 @@ bin_centers_bottom_step = 0.5 * (bin_edges_bottom_step[1:] + bin_edges_bottom_st
 
 # Plot inverted bar charts for y = 0 (bottom)
 plt.bar(bin_centers_bottom_prob, -hist_bottomProb, width=np.diff(bin_edges_bottom_prob), alpha=0.5, color='green')
-plt.bar(bin_centers_bottom_step, -hist_bottomStep, width=np.diff(bin_edges_bottom_step), alpha=0.5, color='purple')
+plt.bar(bin_centers_bottom_step, -hist_bottomStep, width=np.diff(bin_edges_bottom_step), alpha=0.5, color='red')
 
 
 def analyticSolution(x, t, v, D=1):    
