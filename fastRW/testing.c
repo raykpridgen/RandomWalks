@@ -177,16 +177,19 @@ float moveProbCalc(float D, float b, float dt) {
 }
 
 void initialize_rng_states(int num_threads) {
-    // Allocate rng_states for each thread
-    rng_states = malloc(num_threads * sizeof(pcg32_random_t));
-    if (!rng_states) {
-        fprintf(stderr, "Memory allocation failed for RNG states\n");
-        exit(1);
-    }
     #pragma omp parallel
     {
-        int thread_id = omp_get_thread_num();
-        // Initialize each thread's rng state
-        pcg32_srandom_r(&rng_states[thread_id], time(NULL) ^ thread_id, thread_id);
+        // Allocate rng_states for each thread
+        rng_states = malloc(num_threads * sizeof(pcg32_random_t));
+        if (!rng_states) {
+            fprintf(stderr, "Memory allocation failed for RNG states\n");
+            exit(1);
+        }
+        #pragma omp parallel
+        {
+            int thread_id = omp_get_thread_num();
+            // Initialize each thread's rng state
+            pcg32_srandom_r(&rng_states[thread_id], time(NULL) ^ thread_id, thread_id);
+        }
     }
 }
