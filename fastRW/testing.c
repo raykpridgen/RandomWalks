@@ -185,11 +185,8 @@ void initialize_rng_states(int num_threads) {
             fprintf(stderr, "Memory allocation failed for RNG states\n");
             exit(1);
         }
-        #pragma omp parallel
-        {
-            int thread_id = omp_get_thread_num();
-            // Initialize each thread's rng state
-            pcg32_srandom_r(&rng_states[thread_id], time(NULL) ^ thread_id, thread_id);
-        }
+        int thread_id = omp_get_thread_num();
+        // Initialize each thread's rng state
+        pcg32_srandom_r(&rng_states[thread_id], time(NULL) ^ thread_id, thread_id);
     }
 }
