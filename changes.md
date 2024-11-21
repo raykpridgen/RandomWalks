@@ -133,3 +133,8 @@ This comes with several factors, including worrying about storage of precomputed
 # 11/19/2024
 ## Went to computer lab to run large sims
 I am now testing several working versions of the code to see which is the best. 
+
+# 11/21/2024
+## Finishing Up Presentation
+## Running Many Different Simulations
+So for 10,000 p 10,000 t, about 50,000 moves is enough for it to collapse into a blob

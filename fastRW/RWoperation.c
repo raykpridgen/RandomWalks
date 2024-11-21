@@ -3,33 +3,34 @@
 #include <math.h>
 #include <time.h>
 #include <omp.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <float.h>
+#include <limits.h>
+#include "pcg_basic.h"
 
-typedef struct
-{
+pcg32_random_t *rng_states; // Declare as thread-private variable
+#pragma omp threadprivate(rng_states)
+
+typedef struct {
     float x;
     int y;
 } Particle;
 
 float moveProbCalc(float D, float b, float dt);
-
 void initializeParticles(Particle partList[], int numParts);
-
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance);
-
+void moveParticleProb(Particle *particle, float jumpProb, float driftVal, float moveDistance);
 void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance);
-
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
+void initialize_rng_states(int num_threads);
 
 int main(int argc, char *argv[]) {
     if (argc != 8) {
-        printf("Usage: ./RW.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <numCores>\n");
+        printf("Usage: ./RWoperation.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <numCores>\n");
         return 1;
     }
-
-
-    //srand(time(NULL));
-
+    double startTime = omp_get_wtime();
+    
     // Parameters
     float deltaT = atof(argv[1]);
     float timeConst = atof(argv[2]);
@@ -39,201 +40,152 @@ int main(int argc, char *argv[]) {
     int numParticles = atoi(argv[6]);
     int coresToUse = atoi(argv[7]);
 
-    // Conditional to set default max if number requested is too high
-    if (coresToUse > omp_get_num_procs())
-    {
-        printf("Not enough cores. Using max: %d", omp_get_num_procs());
+    if (coresToUse > omp_get_num_procs()) {
+        printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
         coresToUse = omp_get_num_procs();
+    } else {
+        printf("Using %d threads.\n", coresToUse);
     }
-    // Set omp threads to cores requested
     omp_set_num_threads(coresToUse);
+    initialize_rng_states(coresToUse);
 
-    //Seeding threads - to make random numbers thread safe
-    // Declare seed var
-    unsigned int seed;
-    // For threads, using private var seed
-    #pragma omp parallel private(seed)
-    {
-        printf("Threads: %d\n", omp_get_num_threads());
-
-        // Get a custom seed based on time and seed num
-        seed = time(NULL) + omp_get_thread_num();
-        printf("Thread %d has a seed of %d\n", omp_get_thread_num(), seed);
-
-        int randomNumber = erand_48(&seed);
-        printf("Random num: %d\n", randomNumber);
-    }
-
-    exit(0);
-    // Behaviors
     float moveDistance = sqrt(2 * diffCon * deltaT);
-    float increments = floor(timeConst / deltaT);
+    int increments = (int)floor(timeConst / deltaT);
     float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
     float jumpProb = gamma * deltaT;
     float shiftValue = deltaT * bSpin;
 
+    printf("--------- Behavior ---------\n");
+    printf("Increments:          %d\nNumber of Particles: %d\nMove Distance:       %.4f\nMove Probability:    %.4f\nJump Probability:    %.4f\nShift Value:         %.4f\n", increments, numParticles, moveDistance, moveProb, jumpProb, shiftValue);
+    printf("----------------------------\n");
+
     Particle *particleListProb = malloc(numParticles * sizeof(Particle));
     Particle *particleListStep = malloc(numParticles * sizeof(Particle));
-
+    if (!particleListProb || !particleListStep) {
+        fprintf(stderr, "Memory allocation failed for particle lists\n");
+        return 1;
+    }
+    
     initializeParticles(particleListProb, numParticles);
     initializeParticles(particleListStep, numParticles);
 
-    unsigned short seeds[coresToUse][3];
-    unsigned int baseSeed =(unsigned int)time(NULL);
-
-    #pragma omp parallel
-    {
-        int threadNum = omp_get_thread_num();
-        seeds[threadNum][0] = (unsigned short)(baseSeed + threadNum);
-        seeds[threadNum][1] = (unsigned short)(baseSeed + threadNum) >> 16;
-        seeds[threadNum][2] = (unsigned short)(baseSeed + threadNum) >> 32;
-    }
+    printf("Starting simulation...\n");
+    double simStart = omp_get_wtime();
     
-    // Increments
-    for(int i=0; i<increments; i++)
-    {
-        // Particles
-        #pragma omp parallel for 
-        for(int j=0; j<numParticles; j++)
-        {
-            int threadNum = omp_get_thread_num();
-            moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance);
-        }
+    // Increments are set here
+    for (int i = 0; i < increments; i++) {
+        // One thread moves two particles
         #pragma omp parallel for
-        for(int j=0; j<numParticles; j++)
-        {
+        for (int j = 0; j < numParticles; j++) {
+            moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance);
             moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance);
         }
     }
 
+    double simEnd = omp_get_wtime();
+    printf("Simulation completed in %.2f seconds\n", simEnd - simStart);
+
+    printf("Exporting data...\n");
     exportParticlesToCSV(particleListProb, numParticles, "sims/probSim.csv");
     exportParticlesToCSV(particleListStep, numParticles, "sims/stepSim.csv");
-    
+
     free(particleListProb);
     free(particleListStep);
+    free(rng_states);
+
+    printf("Total time: %.2f seconds\n", omp_get_wtime() - startTime);
+    return 0;
 }
 
-void initializeParticles(Particle partList[], int numParts)
-{
-    for(int i=0; i<floor(numParts/2); i++)
-    {
+void initializeParticles(Particle partList[], int numParts) {
+    for (int i = 0; i < floor(numParts / 2); i++) {
         partList[i].x = (float)0;
         partList[i].y = 1;
     }
-    for(int i=floor(numParts/2); i<numParts; i++)
-    {
+    for (int i = floor(numParts / 2); i < numParts; i++) {
         partList[i].x = (float)0;
         partList[i].y = 0;
     }
 }
 
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance)
-{
-    float randJump = rand();
-    randJump = randJump / RAND_MAX;
-    // If jump succeeds
-    if (randJump < jumpProb)
-    {
-        // If particle is on the top line
+void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance) {
+    int thread_id = omp_get_thread_num();
+    float jumpRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
+    if (jumpRand < jumpProb) {
         particle->y = (particle->y == 0) ? 1 : 0;
         return;
-    }
-    // Jump fails, do move
-    else
-    {
-        // Compliment probability if particle is on the bottom line
-        if(particle->y == 0)
-        {
+    } else {
+        int thread_id = omp_get_thread_num();
+        float moveRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
+        if (particle->y == 0) {
             moveProb = 1 - moveProb;
         }
-
-        float randMove = rand();
-        randMove = randMove / RAND_MAX;
-        // Move succeeds - move right
-        if(randMove < moveProb)
-        {
-            particle->x = particle->x + moveDistance;
-
-        }
-        // Move fails - move left
-        else
-        {
-            particle->x = particle->x - moveDistance;
+        if (moveRand < moveProb) {
+            particle->x += moveDistance;
+        } else {
+            particle->x -= moveDistance;
         }
     }
 }
 
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance)
-{
-    //printf("moved particle %f, %f\n", particle->x, particle->y);
-    float randJump = rand();
-    randJump = randJump / RAND_MAX;
-    // If jump succeeds
-    if (randJump < jumpProb)
-    {
-        // Swap particle position
+void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance) {
+    int thread_id = omp_get_thread_num();
+    float jumpRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
+    if (jumpRand < jumpProb) {
         particle->y = (particle->y == 0) ? 1 : 0;
         return;
-    }
-    // Jump fails, do move
-    else
-    {
-        float moveRand = rand();
-        moveRand = moveRand / RAND_MAX;
-        if(particle->y == 1)
-        {
-            if(moveRand < 0.5)
-            {
+    } else {
+        int thread_id = omp_get_thread_num();
+      float moveRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
+        if (particle->y == 1) {
+            if (moveRand < 0.5) {
                 particle->x = particle->x + moveDistance + driftVal;
-            }
-            else
-            {
+            } else {
                 particle->x = particle->x - moveDistance + driftVal;
             }
-        }
-        else
-        {
-            if(moveRand < 0.5)
-            {
+        } else {
+            if (moveRand < 0.5) {
                 particle->x = particle->x + moveDistance - driftVal;
-            }
-            else
-            {
+            } else {
                 particle->x = particle->x - moveDistance - driftVal;
             }
         }
-        
     }
-    //printf("to             %f, %f\n", particle->x, particle->y);
 }
 
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename) {
-
-    FILE *file = fopen(filename, "w"); // Open file for writing
+    FILE *file = fopen(filename, "w");
     if (file == NULL) {
         perror("Error opening file");
         return;
     }
 
-    // Write the header
     fprintf(file, "x,y\n");
-
-    // Write the data for each particle
     for (int i = 0; i < numParticles; i++) {
         fprintf(file, "%.2f,%d\n", particles[i].x, particles[i].y);
     }
-
-    fclose(file); // Close the file
+    fclose(file);
 }
 
-float moveProbCalc(float D, float b, float dt)
-{
-    if(D == 0 && b == 0)
-    {
+float moveProbCalc(float D, float b, float dt) {
+    if (D == 0 && b == 0) {
         return 0.5;
+    } else {
+        return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b)))); 
     }
-    else
+}
+
+void initialize_rng_states(int num_threads) {
+    #pragma omp parallel
     {
-        return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b))));
+        // Allocate rng_states for each thread
+        rng_states = malloc(num_threads * sizeof(pcg32_random_t));
+        if (!rng_states) {
+            fprintf(stderr, "Memory allocation failed for RNG states\n");
+            exit(1);
+        }
+        int thread_id = omp_get_thread_num();
+        // Initialize each thread's rng state
+        pcg32_srandom_r(&rng_states[thread_id], time(NULL) ^ thread_id, thread_id);
     }
 }
