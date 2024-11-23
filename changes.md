@@ -138,3 +138,14 @@ I am now testing several working versions of the code to see which is the best.
 ## Finishing Up Presentation
 ## Running Many Different Simulations
 So for 10,000 p 10,000 t, about 50,000 moves is enough for it to collapse into a blob
+## Tweaks going forward
+I want to add in moves / jumps to return from C to see where steady state lies
+
+# 11/22/1024
+## Presented Today 
+Need to add more illustrations and diagrams of behind the scenes
+## Moving forward
+Harmon wants to get direct frequencies from each x-value
+Send [x, y] to CSV
+extra mode for [x, freq(y)] 
+Open up mathematica

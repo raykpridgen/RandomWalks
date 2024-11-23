@@ -23,11 +23,11 @@ fi
 #done
 
 #Test 3 - Different Gammas
-#for i in $(awk 'BEGIN{for(i=0;i<=0.1;i+=0.005) printf "%.1f\n", i}'); do
+#for i in $(awk 'BEGIN{for(i=0.0015;i>=0;i-=0.0001) printf "%.4f\n", i}'); do
 # python3 RW.py 0.1 1000 1 0.25 $i 10000 4
 #done
 
 # One iteration, base
-python3 RW.py 0.1 1000 1 0.25 0.0005 10000 4
+python3 RW.py 0.1 1000 1 0 0 10000 4
 rm RWoperation
 

@@ -19,8 +19,8 @@ typedef struct {
 
 float moveProbCalc(float D, float b, float dt);
 void initializeParticles(Particle partList[], int numParts);
-void moveParticleProb(Particle *particle, float jumpProb, float driftVal, float moveDistance);
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance);
+bool moveParticleProb(Particle *particle, float jumpProb, float driftVal, float moveDistance);
+bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance);
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
 void initialize_rng_states(int num_threads);
 
@@ -71,7 +71,10 @@ int main(int argc, char *argv[]) {
 
     printf("Starting simulation...\n");
     double simStart = omp_get_wtime();
-    
+
+    int numMovesProb = 0;
+    int numJumpsProb = 0; 
+
     // Increments are set here
     for (int i = 0; i < increments; i++) {
         // One thread moves two particles
@@ -108,12 +111,12 @@ void initializeParticles(Particle partList[], int numParts) {
     }
 }
 
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance) {
+bool moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance) {
     int thread_id = omp_get_thread_num();
     float jumpRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
     if (jumpRand < jumpProb) {
         particle->y = (particle->y == 0) ? 1 : 0;
-        return;
+        return true;
     } else {
         int thread_id = omp_get_thread_num();
         float moveRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
@@ -125,31 +128,45 @@ void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float 
         } else {
             particle->x -= moveDistance;
         }
+        return false;
     }
 }
 
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance) {
+bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance) {
     int thread_id = omp_get_thread_num();
     float jumpRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
-    if (jumpRand < jumpProb) {
+    if (jumpRand < jumpProb) 
+    {
         particle->y = (particle->y == 0) ? 1 : 0;
-        return;
-    } else {
+        return true;
+    } 
+    else 
+    {
         int thread_id = omp_get_thread_num();
-      float moveRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
-        if (particle->y == 1) {
-            if (moveRand < 0.5) {
+        float moveRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
+        if (particle->y == 1) 
+        {
+            if (moveRand < 0.5) 
+            {
                 particle->x = particle->x + moveDistance + driftVal;
-            } else {
+            } 
+            else 
+            {
                 particle->x = particle->x - moveDistance + driftVal;
             }
-        } else {
-            if (moveRand < 0.5) {
+        } 
+        else 
+        {
+            if (moveRand < 0.5) 
+            {
                 particle->x = particle->x + moveDistance - driftVal;
-            } else {
+            } 
+            else 
+            {
                 particle->x = particle->x - moveDistance - driftVal;
             }
         }
+        return false;
     }
 }
 
