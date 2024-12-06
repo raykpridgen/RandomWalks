@@ -149,3 +149,8 @@ Harmon wants to get direct frequencies from each x-value
 Send [x, y] to CSV
 extra mode for [x, freq(y)] 
 Open up mathematica
+
+# 11/25/2024
+On break now
+## Continue parallelism journey, always be improving
+## Implement Frequency calculation this time

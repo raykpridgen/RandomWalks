@@ -43,8 +43,9 @@ def load_csv_data(filepath):
                 x_bottom.append(x_val)
     return x_top, x_bottom
 
-def readIntoCSVFreq(input, output):   
-    x_counts = Counter()
+def readIntoCSVFreq(input, output1, output2):   
+    x_countsTop = Counter()
+    x_countsBottom = Counter()
 
     with open(input, 'r') as csvfile:
         reader = csv.reader(csvfile)
@@ -52,13 +53,22 @@ def readIntoCSVFreq(input, output):
             if (row[0] == 'x'):
                 continue
             x = float(row[0])  # Convert x to a float (if necessary)
-            x_counts[x] += 1
-
+            if (row[1] == '1'):
+                x_countsTop[x] += 1
+            else:
+                x_countsBottom[x] += 1
+ 
     # Write the counts to the output CSV file
-    with open(output, 'w', newline='') as csvfile:
+    with open(output1, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['x', 'frequency'])  # Write header
-        for x, freq in x_counts.items():
+        for x, freq in x_countsTop.items():
+            writer.writerow([x, freq / numParticles])
+    
+    with open(output2, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['x', 'frequency'])  # Write header
+        for x, freq in x_countsBottom.items():
             writer.writerow([x, freq / numParticles])
 
 
@@ -148,5 +158,5 @@ plt.savefig(f"images/{time.time()}.png")
 
 input_file = 'sims/probSim.csv'  # Replace with your input file name
 
-readIntoCSVFreq("sims/probSim.csv", "freq/probSim.csv")
-readIntoCSVFreq("sims/stepSim.csv", "freq/stepSim.csv")
+readIntoCSVFreq("sims/probSim.csv", "freq/probTopSim.csv", "freq/probBottomSim.csv")
+readIntoCSVFreq("sims/stepSim.csv", "freq/stepTopSim.csv", "freq/stepBottomSim.csv")
