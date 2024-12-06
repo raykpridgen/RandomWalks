@@ -88,6 +88,14 @@ int main(int argc, char *argv[]) {
     double simEnd = omp_get_wtime();
     printf("Simulation completed in %.2f seconds\n", simEnd - simStart);
 
+    // Calculate frequencies for each x
+    int xValsProb[3]; 
+    // For each particle, get all x values
+    for (int i = 0; i < numParticles; i++) 
+    {
+        
+
+    }
     printf("Exporting data...\n");
     exportParticlesToCSV(particleListProb, numParticles, "sims/probSim.csv");
     exportParticlesToCSV(particleListStep, numParticles, "sims/stepSim.csv");

@@ -5,20 +5,12 @@ import numpy as np
 import math
 import time
 import sys
+from collections import Counter
 
 if len(sys.argv) != 8:
     print("Usage: ./RW.py <deltaT> <time> <D> <b> <gamma> <numParticles> <numCores>")
     sys.exit(0)
 # Parameters
-'''
-deltaT = 0.1
-timeConst = 10
-diffCon = 1
-bSpin = 0
-gamma = 0
-numParticles = 10000
-coresToUse = 4
-'''
 deltaT = float(sys.argv[1])
 timeConst = float(sys.argv[2])
 diffCon = float(sys.argv[3])
@@ -50,6 +42,25 @@ def load_csv_data(filepath):
             else:
                 x_bottom.append(x_val)
     return x_top, x_bottom
+
+def readIntoCSVFreq(input, output):   
+    x_counts = Counter()
+
+    with open(input, 'r') as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            if (row[0] == 'x'):
+                continue
+            x = float(row[0])  # Convert x to a float (if necessary)
+            x_counts[x] += 1
+
+    # Write the counts to the output CSV file
+    with open(output, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['x', 'frequency'])  # Write header
+        for x, freq in x_counts.items():
+            writer.writerow([x, freq / numParticles])
+
 
 # Separate the x-values based on y-values for prob and step data
 topValsProb, bottomValsProb = load_csv_data("sims/probSim.csv")
@@ -134,3 +145,8 @@ plt.grid(True)
 # Show the plot
 plt.tight_layout()
 plt.savefig(f"images/{time.time()}.png")
+
+input_file = 'sims/probSim.csv'  # Replace with your input file name
+
+readIntoCSVFreq("sims/probSim.csv", "freq/probSim.csv")
+readIntoCSVFreq("sims/stepSim.csv", "freq/stepSim.csv")

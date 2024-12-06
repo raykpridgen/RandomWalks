@@ -28,6 +28,6 @@ fi
 #done
 
 # One iteration, base
-python3 RW.py 0.1 1000 1 0 0 10000 4
+python3 RW.py 0.1 1000 1 0 0 100000 4
 rm RWoperation
 
