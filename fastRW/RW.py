@@ -69,7 +69,7 @@ def readIntoCSVFreq(input, output1, output2):
         writer = csv.writer(csvfile)
         writer.writerow(['x', 'frequency'])  # Write header
         for x, freq in x_countsBottom.items():
-            writer.writerow([x, freq / numParticles])
+            writer.writerow([x, -freq / numParticles])
 
 
 # Separate the x-values based on y-values for prob and step data
