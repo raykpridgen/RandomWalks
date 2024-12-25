@@ -1,11 +1,10 @@
-import csv
 import matplotlib.pyplot as plt
 import subprocess
 import numpy as np
 import math
 import time
 import sys
-from collections import Counter
+import utils
 
 if len(sys.argv) != 8:
     print("Usage: ./RW.py <deltaT> <time> <D> <b> <gamma> <numParticles> <numCores>")
@@ -30,51 +29,9 @@ runTime = time.perf_counter() - runTime
 
 print(f"Simulation ran in {runTime:.2f} seconds.\n")
 
-def load_csv_data(filepath):
-    x_top, x_bottom = [], []
-    with open(filepath, mode='r') as file:
-        reader = csv.DictReader(file)  # Automatically handles the header row
-        for row in reader:
-            x_val = float(row['x'])
-            y_val = int(row['y'])
-            if y_val == 1:
-                x_top.append(x_val)
-            else:
-                x_bottom.append(x_val)
-    return x_top, x_bottom
-
-def readIntoCSVFreq(input, output1, output2):   
-    x_countsTop = Counter()
-    x_countsBottom = Counter()
-
-    with open(input, 'r') as csvfile:
-        reader = csv.reader(csvfile)
-        for row in reader:
-            if (row[0] == 'x'):
-                continue
-            x = float(row[0])  # Convert x to a float (if necessary)
-            if (row[1] == '1'):
-                x_countsTop[x] += 1
-            else:
-                x_countsBottom[x] += 1
- 
-    # Write the counts to the output CSV file
-    with open(output1, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['x', 'frequency'])  # Write header
-        for x, freq in x_countsTop.items():
-            writer.writerow([x, freq / numParticles])
-    
-    with open(output2, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['x', 'frequency'])  # Write header
-        for x, freq in x_countsBottom.items():
-            writer.writerow([x, -freq / numParticles])
-
-
 # Separate the x-values based on y-values for prob and step data
-topValsProb, bottomValsProb = load_csv_data("sims/probSim.csv")
-topValsStep, bottomValsStep = load_csv_data("sims/stepSim.csv")
+topValsProb, bottomValsProb = utils.readDataCSV("sims/probSim.csv")
+topValsStep, bottomValsStep = utils.readDataCSV("sims/stepSim.csv")
 
 # Create the figure
 plt.figure(figsize=(10, 6))
@@ -156,7 +113,5 @@ plt.grid(True)
 plt.tight_layout()
 plt.savefig(f"images/{time.time()}.png")
 
-input_file = 'sims/probSim.csv'  # Replace with your input file name
-
-readIntoCSVFreq("sims/probSim.csv", "freq/probTopSim.csv", "freq/probBottomSim.csv")
-readIntoCSVFreq("sims/stepSim.csv", "freq/stepTopSim.csv", "freq/stepBottomSim.csv")
+utils.writeFreqText("sims/probSim.csv", "freq/probTopSim.txt", "freq/probBottomSim.txt", numParticles)
+utils.writeFreqText("sims/stepSim.csv", "freq/stepTopSim.txt", "freq/stepBottomSim.txt", numParticles)

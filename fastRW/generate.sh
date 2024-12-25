@@ -2,15 +2,25 @@
 
 gcc -fopenmp -o RWoperation RWoperation.c pcg_basic.c -lm
 
-folder="./images"
+imagesFolder="./images"
+freqFolder="./freq"
 
 # Check if the folder exists
-if [ -d "$folder" ]; then
+if [ -d "$imagesFolder" ]; then
     # Delete all .png files in the folder
-    rm -f "$folder"/*.png
-    echo "All .png files in '$folder' have been deleted."
+    rm -f "$imagesFolder"/*.png
+    echo "All .png files in '$imagesFolder' have been deleted."
 else
     mkdir images
+fi
+
+if [ -d "$freqFolder" ]; then
+    rm -f "$freqFolder"/*.csv
+    rm -f "$freqFolder"/*.txt
+    echo "All files in '$freqFolder' have been deleted."
+else
+    mkdir images
+
 fi
 # Test 1 - Different Biases
 #for i in $(awk 'BEGIN{for(i=-1;i<=1;i+=0.1) printf "%.1f\n", i}'); do
@@ -27,7 +37,7 @@ fi
 # python3 RW.py 0.1 1000 1 0.25 $i 10000 4
 #done
 
-# One iteration, base
-python3 RW.py 0.1 1000 1 0 0 10000 4
-rm RWoperation
 
+# One iteration, base
+python3 RW.py 0.1 1000 1 0 0 100 4
+rm RWoperation

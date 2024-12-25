@@ -154,3 +154,10 @@ Open up mathematica
 On break now
 ## Continue parallelism journey, always be improving
 ## Implement Frequency calculation this time
+
+# 12/6/2024
+Made small updates over break
+## Implemented frequency calculation
+this is now being used in MMA to compare to the fourier transform there
+## Continue testing
+Work with the bash script to automate the sims and see how they run
