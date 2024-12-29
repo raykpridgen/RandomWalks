@@ -113,5 +113,5 @@ plt.grid(True)
 plt.tight_layout()
 plt.savefig(f"images/{time.time()}.png")
 
-utils.writeFreqText("sims/probSim.csv", "freq/probTopSim.txt", "freq/probBottomSim.txt", numParticles)
-utils.writeFreqText("sims/stepSim.csv", "freq/stepTopSim.txt", "freq/stepBottomSim.txt", numParticles)
+utils.writeFreqCSV("sims/probSim.csv", "freq/probTopSim", "freq/probBottomSim", numParticles)
+utils.writeFreqTXT("sims/probSim.csv", "freq/probTopSim", "freq/probBottomSim", numParticles)

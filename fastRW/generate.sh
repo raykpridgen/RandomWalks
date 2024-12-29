@@ -39,5 +39,5 @@ fi
 
 
 # One iteration, base
-python3 RW.py 0.1 1000 1 0 0 100 4
+python3 RW.py 0.1 1 1 0 0 100 4
 rm RWoperation

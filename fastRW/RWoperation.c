@@ -187,7 +187,7 @@ void exportParticlesToCSV(Particle particles[], int numParticles, const char *fi
 
     fprintf(file, "x,y\n");
     for (int i = 0; i < numParticles; i++) {
-        fprintf(file, "%.2f,%d\n", particles[i].x, particles[i].y);
+        fprintf(file, "%.3f,%d\n", particles[i].x, particles[i].y);
     }
     fclose(file);
 }

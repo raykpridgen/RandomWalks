@@ -1,5 +1,5 @@
 import csv
-from collections import Counter
+from collections import defaultdict
 
 def readDataCSV(filepath):
     """
@@ -24,94 +24,92 @@ def readDataCSV(filepath):
     return x_top, x_bottom
 
 def writeFreqCSV(input, output1, output2, numParticles):
-    """write
-    This function takes a filename for a list of particles. From there, these particles are converted into frequencies
-    that can be used as a histogram. Since each x-value can have a top or a bottom particle, it needs to be seperated
-    into two lists for top particles and bottom particles, hence the two output files. 
+    """
+    This function is designed to take a name for a CSV file, convert the values in the file starting 
+    as (X,Y) to (X, frequency(X)). Then, this function places these frequencies into two separate CSV
+    files for the top line and the bottom line.
 
     Input: file path, output name 1, output name 2, number of particles to process
 
     Output: No output, operates on files
     """
 
-    # Dictionaries to hold each x-value and number of occurences
-    x_countsTop = Counter()
-    x_countsBottom = Counter()
+    output1 = output1 + ".csv"
+    output2 = output2 + ".csv"
+    #Dictionaries for top and bottom particles
+    coordTopDict = defaultdict(int)
+    coordBottomDict = defaultdict(int)
 
-    # Open file from name
+    # Read values out of CSV into a dictionary
     with open(input, 'r') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
-            # Ignore header row
+            # Ignore header
             if (row[0] == 'x'):
                 continue
-            # String to float
-            x = float(row[0])  # Convert x to a float (if necessary)
-            # If the particle is on y = 1
             if (row[1] == '1'):
-                # Increment dictionary for specific x-value
-                x_countsTop[x] += 1
-            # If particle is on y = 0
-            else:
-                # Increment dictionary
-                x_countsBottom[x] += 1
- 
-    # Write the counts to the output CSV file
+                coordTopDict[row[0]] += 1
+                # Add to top dictionary
+            elif (row[1] == '0'):
+                # Add to bottom dictionary
+                coordBottomDict[row[0]] += 1
+    #print(sum(coordTopDict.values()))
+    #print(sum(coordBottomDict.values()))
+
+    # Write the values into output CSV file
     with open(output1, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['x', 'frequency'])  # Write header
-        for x, freq in x_countsTop.items():
+        for x, freq in coordTopDict.items():
             writer.writerow([x, freq / numParticles])
     
     with open(output2, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['x', 'frequency'])  # Write header
-        for x, freq in x_countsBottom.items():
-            writer.writerow([x, -freq / numParticles])
+        for x, freq in coordBottomDict.items():
+            writer.writerow([x, freq / numParticles])
+    return
 
-def writeFreqText(input, output1, output2, numParticles):
+def writeFreqTXT(input, output1, output2, numParticles):
     """
-    This function takes a filename for a list of particles. From there, these particles are converted into frequencies
-    that can be used as a histogram. Since each x-value can have a top or a bottom particle, it needs to be seperated
-    into two lists for top particles and bottom particles, hence the two output files. This is exactly like the other 
-    function except it operates on .txt files.
+    This function is designed to take a name for a CSV file, convert the values in the file starting 
+    as (X,Y) to (X, frequency(X)). Then, this function places these frequencies into two separate CSV
+    files for the top line and the bottom line.
 
     Input: file path, output name 1, output name 2, number of particles to process
 
     Output: No output, operates on files
     """
-    
-    # Dictionaries to hold each x-value and number of occurences
-    x_countsTop = Counter()
-    x_countsBottom = Counter()
+    output1 = output1 + ".txt"
+    output2 = output2 + ".txt"
+    #Dictionaries for top and bottom particles
+    coordTopDict = defaultdict(int)
+    coordBottomDict = defaultdict(int)
 
-    # Open file from name
+    # Read values out of CSV into a dictionary
     with open(input, 'r') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
-            # Ignore header row
+            # Ignore header
             if (row[0] == 'x'):
                 continue
-            # String to float
-            x = float(row[0])  # Convert x to a float (if necessary)
-            # If the particle is on y = 1
             if (row[1] == '1'):
-                # Increment dictionary for specific x-value
-                x_countsTop[round(x, 2)] += 1
-            # If particle is on y = 0
-            else:
-                # Increment dictionary
-                x_countsBottom[round(x, 2)] += 1
- 
-    # Write the counts to the output file
+                coordTopDict[float(row[0])] += 1
+                # Add to top dictionary
+            elif (row[1] == '0'):
+                # Add to bottom dictionary
+                coordBottomDict[float(row[0])] += 1
+    #print(sum(coordTopDict.values()))
+    #print(sum(coordBottomDict.values()))
+
+    # Write the values into output CSV file
     with open(output1, 'w') as txtfile:
-        txtfile.write("X-Value : Frequency")  # Write header
-        for x, freq in x_countsTop.items():
-            #print(f"{x}, {freq}")
-            freqValue = freq / numParticles
-            txtfile.write(f"\n{x}, {freqValue}")
-    
+        txtfile.write('x, frequency')  # Write header
+        for x, freq in coordTopDict.items():
+            txtfile.write(f"\n{x}, {freq / numParticles}")
+
     with open(output2, 'w') as txtfile:
-        txtfile.write("X-Value : Frequency")  # Write header
-        for x, freq in x_countsBottom.items():
-            txtfile.write(f"\n{x}, {freqValue}")
+        txtfile.write('x, frequency') # Write header
+        for x, freq in coordBottomDict.items():
+            txtfile.write(f"\n{x}, {freq / numParticles}")
+    return
