@@ -161,3 +161,9 @@ Made small updates over break
 this is now being used in MMA to compare to the fourier transform there
 ## Continue testing
 Work with the bash script to automate the sims and see how they run
+
+# 12/29/2024
+# Frequency output - CSV and TXT
+Harmon wanted .txt output of the frequencies to compare with mathematica
+# SSH problems
+Have not been able to SSH into CCU computer

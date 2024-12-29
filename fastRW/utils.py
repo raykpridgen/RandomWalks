@@ -107,7 +107,7 @@ def writeFreqText(input, output1, output2, numParticles):
     with open(output1, 'w') as txtfile:
         txtfile.write("X-Value : Frequency")  # Write header
         for x, freq in x_countsTop.items():
-            print(f"{x}, {freq}")
+            #print(f"{x}, {freq}")
             freqValue = freq / numParticles
             txtfile.write(f"\n{x}, {freqValue}")
     
