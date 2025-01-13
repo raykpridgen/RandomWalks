@@ -19,9 +19,10 @@ numParticles = int(sys.argv[6])
 coresToUse = int(sys.argv[7])
 
 increments = int (timeConst / deltaT)
+# Potential problem area -- rounding
 moveDistance = round(math.sqrt(2 * diffCon * deltaT), 3)
 
-runProgram = ['./RWoperation', str(deltaT), str(timeConst), str(diffCon), str(bSpin), str(gamma), str(numParticles), str(coresToUse)]
+runProgram = ['./RWoperation', sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]]
 
 runTime = time.perf_counter()
 result = subprocess.run(runProgram, capture_output=False)

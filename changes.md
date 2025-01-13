@@ -163,7 +163,18 @@ this is now being used in MMA to compare to the fourier transform there
 Work with the bash script to automate the sims and see how they run
 
 # 12/29/2024
-# Frequency output - CSV and TXT
+## Frequency output - CSV and TXT
 Harmon wanted .txt output of the frequencies to compare with mathematica
-# SSH problems
+## SSH problems
 Have not been able to SSH into CCU computer
+
+# 1/2/2025
+## New problem with bias
+When I input a small bias like b < .1 it seems to default to a sim with no drift for some reason
+
+## Testing for solid state
+Finding simulation conditions where the concentration stays within bounds over extending time
+
+## Overarching problem
+I beleive an underlying problem of this simulation's minor unexpected behaviors is because of the rounding.
+I am going to have to do a thorough reevaluation of the code and make sure the values are preserved at each step.
