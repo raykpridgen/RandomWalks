@@ -116,5 +116,5 @@ plt.savefig(f"images/{time.time()}.png")
 
 utils.writeFreqCSV("sims/probSim.csv", "freq/probTopSim", "freq/probBottomSim", numParticles)
 utils.writeFreqCSV("sims/stepSim.csv", "freq/stepTopSim", "freq/stepBottomSim", numParticles)
-utils.writeFreqTXT("sims/probSim.csv", "freq/probTopSim", "freq/probBottomSim", numParticles)
-utils.writeFreqTXT("sims/stepSim.csv", "freq/stepTopSim", "freq/stepBottomSim", numParticles)
+#utils.writeFreqTXT("sims/probSim.csv", "freq/probTopSim", "freq/probBottomSim", numParticles)
+#utils.writeFreqTXT("sims/stepSim.csv", "freq/stepTopSim", "freq/stepBottomSim", numParticles)
