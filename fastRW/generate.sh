@@ -51,5 +51,5 @@ fi
 
 # One iteration, base
 #             dt - T - D - b - g - part - cores
-python3 RW.py 0.1 1000 1 0.05 0 1000 4
+python3 RW.py 0.1 1000 1 0.05 0 10000 4
 rm RWoperation
