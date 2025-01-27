@@ -7,22 +7,17 @@
 #include <stdlib.h>
 #include <float.h>
 #include <limits.h>
+#include <fcntl.h>  // For shm_open() flags (O_CREAT, O_RDWR)
+#include <sys/mman.h>  // For mmap(), MAP_SHARED
+#include <sys/stat.h>  // For mode constants (0666)
+#include <string.h>  // For memset() (if needed)
+#include <unistd.h> 
 #include "pcg_basic.h"
+#include "help/helper.h"
 
-pcg32_random_t *rng_states; // Declare as thread-private variable
-#pragma omp threadprivate(rng_states)
+#define SHM_NAME "/RandomWalksData"  // Shared memory name
+#define SHM_SIZE 4096  // Shared memory size
 
-typedef struct {
-    float x;
-    int y;
-} Particle;
-
-float moveProbCalc(float D, float b, float dt);
-void initializeParticles(Particle partList[], int numParts);
-bool moveParticleProb(Particle *particle, float jumpProb, float driftVal, float moveDistance);
-bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance);
-void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
-void initialize_rng_states(int num_threads);
 
 int main(int argc, char *argv[]) {
     if (argc != 8) {
@@ -39,6 +34,10 @@ int main(int argc, char *argv[]) {
     float gamma = atof(argv[5]);
     int numParticles = atoi(argv[6]);
     int coresToUse = atoi(argv[7]);
+    
+    // Step for GUI
+    int step = 10;
+    
 
     if (coresToUse > omp_get_num_procs()) {
         printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
@@ -55,19 +54,26 @@ int main(int argc, char *argv[]) {
     float jumpProb = gamma * deltaT;
     float shiftValue = deltaT * bSpin;
 
-    printf("--------- Behavior ---------\n");
-    printf("Increments:          %d\nNumber of Particles: %d\nMove Distance:       %.4f\nMove Probability:    %.4f\nJump Probability:    %.4f\nShift Value:         %.4f\n", increments, numParticles, moveDistance, moveProb, jumpProb, shiftValue);
-    printf("----------------------------\n");
+    //printf("--------- Behavior ---------\n");
+    //printf("Increments:          %d\nNumber of Particles: %d\nMove Distance:       %.4f\nMove Probability:    %.4f\nJump Probability:    %.4f\nShift Value:         %.4f\n", increments, numParticles, moveDistance, moveProb, jumpProb, shiftValue);
+    //printf("----------------------------\n");
 
     Particle *particleListProb = malloc(numParticles * sizeof(Particle));
-    Particle *particleListStep = malloc(numParticles * sizeof(Particle));
-    if (!particleListProb || !particleListStep) {
+    ParticleDataList *freqList = malloc(sizeof(ParticleDataList));  // Allocate memory for freqList
+    if (!freqList) {
+        fprintf(stderr, "Memory allocation failed for freqList\n");
+          exit(1);
+    }
+    memset(freqList, 0, sizeof(ParticleDataList));  // Clear memory
+
+    //Particle *particleListStep = malloc(numParticles * sizeof(Particle));
+    if (!particleListProb) {
         fprintf(stderr, "Memory allocation failed for particle lists\n");
         return 1;
     }
     
     initializeParticles(particleListProb, numParticles);
-    initializeParticles(particleListStep, numParticles);
+    //initializeParticles(particleListStep, numParticles);
 
     printf("Starting simulation...\n");
     double simStart = omp_get_wtime();
@@ -75,142 +81,74 @@ int main(int argc, char *argv[]) {
     int numMovesProb = 0;
     int numJumpsProb = 0; 
 
+    // Open or create shared memory
+    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) 
+    {
+        perror("shm_open failed");
+        exit(1);
+    }
+
+    
+    // Set the size of the shared memory
+    ftruncate(shm_fd, SHM_SIZE);
+    void *shm_ptr = mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shm_ptr == MAP_FAILED) 
+    {
+        perror("mmap failed");
+        exit(1);
+    }
+    
+    // Pointer to the first part of the shared memory (data + size + flag)
+    ParticleDataList *particleDataList = (ParticleDataList*)shm_ptr;
+    int *data_size = (int*)shm_ptr;  // To store the number of particles
+    int *updated_flag = (int*)(shm_ptr + sizeof(int));  // To store updated flag
+
+    // Clear the memory (this should be done before writing new data)
+    memset(particleDataList, 0, SHM_SIZE);
+
+
     // Increments are set here
     for (int i = 0; i < increments; i++) {
         // One thread moves two particles
         #pragma omp parallel for
         for (int j = 0; j < numParticles; j++) {
             moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance);
-            moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance);
+            //moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance);
+        }
+        if (i % step == 0)
+        {
+            // Send data to python
+            while (freqList->read == false)
+            {
+                // Optional: Sleep for a brief moment to avoid excessive CPU usage
+                sleep(0.5); // Uncomment this line if needed
+            }
+            int freqCount = 0;
+            // Send data to python here
+            particlesToFrequency(particleListProb, numParticles, &freqList, &freqCount);
+            for (int j = 0; j < freqCount; j++)
+            #pragma omp critical
+            {
+                // Update shared memory
+                particleDataList->particles[j].x = freqList->particles[j].x;
+                particleDataList->particles[j].y = freqList->particles[j].y;
+                particleDataList->particles[j].freqx = freqList->particles[j].freqx;
+                
+            }
+            particleDataList->read = false;
         }
     }
 
     double simEnd = omp_get_wtime();
     printf("Simulation completed in %.2f seconds\n", simEnd - simStart);
 
-    // Calculate frequencies for each x
-    int xValsProb[3]; 
-    // For each particle, get all x values
-    for (int i = 0; i < numParticles; i++) 
-    {
-        
-
-    }
-    printf("Exporting data...\n");
-    exportParticlesToCSV(particleListProb, numParticles, "sims/probSim.csv");
-    exportParticlesToCSV(particleListStep, numParticles, "sims/stepSim.csv");
-
     free(particleListProb);
-    free(particleListStep);
-    free(rng_states);
+    free(freqList);  // If freqList was dynamically allocated
 
-    printf("Total time: %.2f seconds\n", omp_get_wtime() - startTime);
+    //free(particleListStep);
+    free_rng_states();
+
+    //printf("Total time: %.2f seconds\n", omp_get_wtime() - startTime);
     return 0;
-}
-
-void initializeParticles(Particle partList[], int numParts) {
-    for (int i = 0; i < floor(numParts / 2); i++) {
-        partList[i].x = (float)0;
-        partList[i].y = 1;
-    }
-    for (int i = floor(numParts / 2); i < numParts; i++) {
-        partList[i].x = (float)0;
-        partList[i].y = 0;
-    }
-}
-
-bool moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance) {
-    int thread_id = omp_get_thread_num();
-    float jumpRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
-    if (jumpRand < jumpProb) {
-        particle->y = (particle->y == 0) ? 1 : 0;
-        return true;
-    } else {
-        int thread_id = omp_get_thread_num();
-        float moveRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
-        if (particle->y == 0) {
-            moveProb = 1 - moveProb;
-        }
-        if (moveRand < moveProb) {
-            particle->x += moveDistance;
-        } else {
-            particle->x -= moveDistance;
-        }
-        return false;
-    }
-}
-
-bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance) {
-    int thread_id = omp_get_thread_num();
-    float jumpRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
-    if (jumpRand < jumpProb) 
-    {
-        particle->y = (particle->y == 0) ? 1 : 0;
-        return true;
-    } 
-    else 
-    {
-        int thread_id = omp_get_thread_num();
-        float moveRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
-        if (particle->y == 1) 
-        {
-            if (moveRand < 0.5) 
-            {
-                particle->x = particle->x + moveDistance + driftVal;
-            } 
-            else 
-            {
-                particle->x = particle->x - moveDistance + driftVal;
-            }
-        } 
-        else 
-        {
-            if (moveRand < 0.5) 
-            {
-                particle->x = particle->x + moveDistance - driftVal;
-            } 
-            else 
-            {
-                particle->x = particle->x - moveDistance - driftVal;
-            }
-        }
-        return false;
-    }
-}
-
-void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename) {
-    FILE *file = fopen(filename, "w");
-    if (file == NULL) {
-        perror("Error opening file");
-        return;
-    }
-
-    fprintf(file, "x,y\n");
-    for (int i = 0; i < numParticles; i++) {
-        fprintf(file, "%.3f,%d\n", particles[i].x, particles[i].y);
-    }
-    fclose(file);
-}
-
-float moveProbCalc(float D, float b, float dt) {
-    if (D == 0 && b == 0) {
-        return 0.5;
-    } else {
-        return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b)))); 
-    }
-}
-
-void initialize_rng_states(int num_threads) {
-    #pragma omp parallel
-    {
-        // Allocate rng_states for each thread
-        rng_states = malloc(num_threads * sizeof(pcg32_random_t));
-        if (!rng_states) {
-            fprintf(stderr, "Memory allocation failed for RNG states\n");
-            exit(1);
-        }
-        int thread_id = omp_get_thread_num();
-        // Initialize each thread's rng state
-        pcg32_srandom_r(&rng_states[thread_id], time(NULL) ^ thread_id, thread_id);
-    }
 }

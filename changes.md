@@ -178,3 +178,18 @@ Finding simulation conditions where the concentration stays within bounds over e
 ## Overarching problem
 I beleive an underlying problem of this simulation's minor unexpected behaviors is because of the rounding.
 I am going to have to do a thorough reevaluation of the code and make sure the values are preserved at each step.
+
+# 1/25/2025
+Forgot to update for a while, doing the following
+
+## Mathematica Work
+trying to get my code to match with the mathematica version
+
+## GUI Update
+This caused the implementation of:
+- Shared Memory
+- Python real time updates
+
+Current problem:
+I run into a seg fault traces right to when the random states get initialized.
+Not sure how to stop this, I have been using valgrind and the sanitizer flag. Chat GPT is no help.

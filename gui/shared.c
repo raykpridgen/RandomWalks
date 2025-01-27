@@ -1,41 +1,59 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <unistd.h>
-#include <stdbool.h>
+#include <fcntl.h>  // For shm_open() flags (O_CREAT, O_RDWR)
+#include <sys/mman.h>  // For mmap(), MAP_SHARED
+#include <sys/stat.h>  // For mode constants (0666)
+#include <stdio.h>  // For perror() and printf()
+#include <stdlib.h>  // For exit()
+#include <string.h>  // For memset() (if needed)
+#include <unistd.h>  // For sleep()
 
-#define SHM_KEY 12345 // Shared memory key
-#define SIZE 1024 // Size of the shared memory block
+#define SHM_NAME "/TESTINGTESTING123"  // Shared memory name
+#define SHM_SIZE 1024  // Shared memory size
 
+// Define a structure to store particle data
 typedef struct {
-    float data1;  // Example float data
-    bool data2;   // Example boolean data
-} SharedData;
+    float x;
+    float y;
+    int id;
+    char active;  // Boolean-like flag
+    int updated;  // Flag to indicate if the data has been updated
+} Particle;
 
-int main() {
-    // Get the shared memory ID
-    int shmid = shmget(SHM_KEY, SIZE, 0666 | IPC_CREAT);
-    if (shmid == -1) {
-        perror("shmget failed");
+int main() 
+{
+    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) 
+    {
+        perror("shm_open failed");
         exit(1);
     }
 
-    // Attach the shared memory
-    SharedData* shm_ptr = (SharedData*) shmat(shmid, NULL, 0);
-    if (shm_ptr == (SharedData*) -1) {
-        perror("shmat failed");
+    ftruncate(shm_fd, SHM_SIZE);  // Set the size of the shared memory segment
+    void *shm_ptr = mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shm_ptr == MAP_FAILED) 
+    {
+        perror("mmap failed");
         exit(1);
     }
 
-    // Set values in shared memory
-    shm_ptr->data1 = 42.0f;  // Example float
-    shm_ptr->data2 = true;   // Example boolean
+    // Pointer to shared memory
+    Particle *p = (Particle*)shm_ptr;
 
-    printf("Data written to shared memory: %.2f, %d\n", shm_ptr->data1, shm_ptr->data2);
+    // Update the particle data and set the updated flag
+    p->x = 1.5;
+    p->y = -2.3;
+    p->id = 42;
+    p->active = 1;  // True
 
-    // Detach and leave shared memory
-    shmdt(shm_ptr);
-    
+    // Indicate that data has been updated
+    p->updated = 1;
+
+    printf("Particle data written to shared memory.\n");
+
+    // Sleep for a while (simulating time passing)
+    sleep(1);  // Simulate delay for next update
+
+    // Unset the updated flag after consumption (this will be done by Python)
+    p->updated = 0;
+
     return 0;
 }
