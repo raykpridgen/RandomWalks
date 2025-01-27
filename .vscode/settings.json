@@ -1,5 +1,11 @@
 {
     "files.associations": {
-        "cmath": "c"
+        "cmath": "c",
+        "shm.h": "c",
+        "stdlib.h": "c",
+        "pcg_basic.h": "c",
+        "omp.h": "c",
+        "limits.h": "c",
+        "float.h": "c"
     }
 }
