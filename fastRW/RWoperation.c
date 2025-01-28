@@ -18,7 +18,7 @@
 #include "help/helper.h"
 
 #define SHM_KEY 4755  // Shared memory name
-#define SHM_SIZE 1208  // Shared memory size
+#define SHM_SIZE 3908  // Shared memory size
 
 
 int main(int argc, char *argv[]) {
@@ -48,8 +48,6 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    
-
     if (coresToUse > omp_get_num_procs()) {
         printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
         coresToUse = omp_get_num_procs();
@@ -78,7 +76,7 @@ int main(int argc, char *argv[]) {
     printf("Clearing memory for freq list\n");
     memset(freqList, 0, sizeof(ParticleDataList));  // Clear memory
 
-    //Particle *particleListStep = malloc(numParticles * sizeof(Particle));
+    //Particle *parti   cleListStep = malloc(numParticles * sizeof(Particle));
     if (!particleListProb) {
         fprintf(stderr, "Memory allocation failed for particle lists\n");
         return 1;
@@ -94,26 +92,8 @@ int main(int argc, char *argv[]) {
     int numJumpsProb = 0; 
 
    
-    int shm_id = shmget(SHM_KEY, SHM_SIZE, IPC_CREAT | 4755);
+    int shm_id = shmget(SHM_KEY, SHM_SIZE, IPC_CREAT | 0666);
     struct shmid_ds shm_info;
-    //if (shmctl(shm_id, IPC_STAT, &shm_info) == -1) {
-    //    perror("shmctl IPC_STAT failed");
-    //    exit(1);
-    //}
-
-    // Modify permissions to 0666 (read/write for all)
-    //shm_info.shm_perm.mode = 0666;
-
-    // Set the new permissions using shmctl
-    //if (shmctl(shm_id, IPC_SET, &shm_info) == -1) {
-       // perror("shmctl IPC_SET failed");
-        //exit(1);
-    //}
-    //if (shm_id == -1)
-    //{
-    //    perror("shmget failed");
-    //    exit(1);
-    //}
     
     // Pointer to the first part of the shared memory (data + size + flag)
     ParticleDataList *particleDataList = (ParticleDataList*)shmat(shm_id, NULL, 0);

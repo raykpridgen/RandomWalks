@@ -17,7 +17,7 @@ import time
 
 class MainWindow(QMainWindow):
 
-    SHM_SIZE = 1208  # Define the shared memory size in bytes. Adjust as necessary.
+    SHM_SIZE = 3908  # Define the shared memory size in bytes. Adjust as necessary.
     SHM_KEY = 4755
 
     def __init__(self):
