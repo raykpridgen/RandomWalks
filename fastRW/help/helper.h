@@ -17,7 +17,6 @@
 #ifndef HELPER_H
 #define HELPER_H
 
-extern pcg32_random_t *rng_states;
 
 typedef struct {
     float x;
@@ -31,7 +30,7 @@ typedef struct {
 } DataParticle;
 
 typedef struct {
-    DataParticle particles[325];   
+    DataParticle particles[100];   
     int count;                  // Number of top particles
     bool read;
 } ParticleDataList;
@@ -39,11 +38,10 @@ typedef struct {
 
 float moveProbCalc(float D, float b, float dt);
 void initializeParticles(Particle partList[], int numParts);
-bool moveParticleProb(Particle *particle, float jumpProb, float driftVal, float moveDistance);
-bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance);
+bool moveParticleProb(Particle *particle, float jumpProb, float driftVal, float moveDistance, pcg32_random_t *rng_states);
+bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance, pcg32_random_t *rng_states);
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
-void initialize_rng_states(int num_threads);
+void initialize_rng_states(int num_threads, pcg32_random_t *rng_states);
 // Function to convert particles to frequency list
 void particlesToFrequency(Particle particles[], int numParticles, ParticleDataList **freqList, int *freqCount);
-void free_rng_states();
 #endif

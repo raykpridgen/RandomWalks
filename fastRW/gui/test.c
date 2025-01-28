@@ -19,7 +19,7 @@ typedef struct {
 } DataParticle;
 
 typedef struct {
-    DataParticle particles[325];   
+    DataParticle particles[100];   
     int count;                  // Number of top particles
     bool read;
 } ParticleDataList;
