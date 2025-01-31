@@ -1,6 +1,6 @@
 #!/bin/bash
 
-gcc -fopenmp -o RWoperation RWoperation.c pcg_basic.c -lm
+gcc -fopenmp -o RWoperation RWoperation.c help/helper.c pcg_basic.c -lm
 
 imagesFolder="./images"
 freqFolder="./freq"
