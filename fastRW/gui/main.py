@@ -9,16 +9,34 @@ import sys
 import numpy as np
 import subprocess
 import sysv_ipc
-import mmap
 import struct
-import os
-import time
+import ctypes
 
+
+# Define the DataParticle structure
+class DataParticle(ctypes.Structure):
+    _fields_ = [
+        ("x", ctypes.c_float),
+        ("y", ctypes.c_float),
+        ("freqx", ctypes.c_float),
+    ]
+
+# Define the ParticleDataList structure
+class ParticleDataList(ctypes.Structure):
+    _fields_ = [
+        ("particles", DataParticle * 325),  # Array of 325 DataParticle structures
+        ("count", ctypes.c_int),            # Integer field
+        ("read", ctypes.c_bool),            # Boolean field
+    ]
 
 class MainWindow(QMainWindow):
 
     SHM_SIZE = 3908  # Define the shared memory size in bytes. Adjust as necessary.
     SHM_KEY = 4755
+
+    particle_count = 325
+    particle_format = "fff"  # Format for one particle (float x, y, freqx)
+    particle_list_format = f"{particle_count * 3}f i 3x ?" 
 
     def __init__(self):
         super().__init__()
@@ -27,8 +45,12 @@ class MainWindow(QMainWindow):
         self.freqVals = []
         
         # Setup shared memory (key should match C program)
-        self.shm = sysv_ipc.SharedMemory(self.SHM_KEY, sysv_ipc.IPC_CREAT, size=self.SHM_SIZE)
-        #self.flag_shm = sysv_ipc.SharedMemory(self.SHM_SIZE)  # Separate flag memory (if used)
+        try:
+            # Open the shared memory segment
+            self.shm = sysv_ipc.SharedMemory(self.SHM_KEY)
+        except sysv_ipc.ExistentialError:
+            print("Shared memory segment not found.")
+            exit(1)
 
         # Window properties
         self.setWindowTitle("Particle Simulation")
@@ -106,7 +128,7 @@ class MainWindow(QMainWindow):
         particles = self.particles_slider.value()  # QSlider value
         cores = 4
         command = [
-            "sudo", "./RWoperation", str(dt), str(T), str(D), str(b), str(g), str(particles), str(cores)
+            "./RWoperation", str(dt), str(T), str(D), str(b), str(g), str(particles), str(cores)
         ]
         print("C program was called\n")
         print(command)
@@ -119,31 +141,48 @@ class MainWindow(QMainWindow):
     def read_shared_memory(self):
         print("read_shared_memory\n")
         """ Reads complex data structure from shared memory. """
-        raw_data = self.shm.read(self.SHM_SIZE)
-        
+        buffer = self.shm.read()
+        if len(buffer) != ctypes.sizeof(ParticleDataList):
+            raise RuntimeError(f"Shared memory size mismatch: expected {ctypes.sizeof(ParticleDataList)}, got {len(buffer)}")
+
+        unpacked = struct.unpack(self.particle_list_format, buffer)
+
+        count = unpacked[self.particle_count * 3]
+        read_flag = unpacked[self.particle_count * 3 + 1]
+
+        print(f"Count: {count}")
+        print(f"Read: {read_flag}")
+
         # Unpack the data:
-        # First unpack the count (4 bytes) and read flag (1 byte)
-        count, read_flag = struct.unpack("I?", raw_data[:5])  # "I" for int (count), "?" for bool (read)
         if not read_flag:
             print("python reads flag as false, begins reading data\n")
-            # Unpack the particles array (each particle = 3 floats, 12 bytes each)
-            num_particles = 325
-            particle_format = "3f"  # Three floats for each DataParticle (x, y, freqx)
-            particles = []
-            offset = 5  # Start after the count and read flag (5 bytes)
 
-            for i in range(num_particles):
-                # Unpack each DataParticle (x, y, freqx)
-                particle_data = struct.unpack_from(particle_format, raw_data, offset)
-                particles.append(particle_data)
-                offset += struct.calcsize(particle_format)  # Move to the next DataParticle
+            newParticles = []
+
+            check = False
+
+            for i in range(count):
+                x, y, freqx = unpacked[i * 3 : (i * 3) + 3]
+                if freqx[i] > 0:
+                    check = True
+                newParticles.extend([x, y, freqx])
+                
+            sendSetup = ParticleDataList()
+            sendSetup.read = True
+            self.shm.write(bytearray(sendSetup))
+
+            buffer = self.shm.read()
+            updated_data = ParticleDataList.from_buffer_copy(buffer)
+
+            print("Updated read flag:", updated_data.read)
+            
+            if not check:
+                print("No data in incoming list. returning.\n")
+                return [], read_flag, []
 
             
-            new_data = struct.pack("I?", count, True)
-
-            self.shm.write(new_data)
             print("Memory was available\n")
-            return count, read_flag, particles
+            return count, False, newParticles
         else:
             print("No memory available\n")
             print(f"Read flag: {read_flag}")
@@ -167,12 +206,12 @@ class MainWindow(QMainWindow):
             # Optionally, update the plot with multiple curves (one for each attribute)
             # You can plot `x` vs `y` and `x` vs `freqx`, or overlay all in a single plot
 
-            self.xVals = [p[0] for p in particles]  # Extract x values from particles
-            self.yVals = [p[1] for p in particles]  # Extract y values from particles
-            self.freqVals = [p[2] for p in particles]  # Extract freqx values from particles
+            self.xVals = []
+            self.yVals = []
+            self.freqVals = []
 
-            print(f"x values: {self.xVals}\n")
-            print(f"y values: {self.yVals}\n")
+            for l in particles:
+                self.xVals, self.yVals, self.freqVals = particles[l * 3 : (l * 3) + 3]
             
             # Example of setting the data for plotting (you may want multiple plots or combine them)
             # If you want to plot freqx as a separate curve, you can add another curve:
@@ -183,7 +222,7 @@ class MainWindow(QMainWindow):
                 print("Error: x or y values are empty!")
                 return  # Early exit if data is invalid
             try:
-                self.curve.setData(self.xVals, self.yVals)  # Plot x vs y
+                self.curve.setData(self.xVals, self.freqVals) 
             except ValueError:
                 print("Invalid data from C program.")
         else:

@@ -17,8 +17,8 @@
 #include "pcg_basic.h"
 #include "help/helper.h"
 
-#define SHM_KEY 4755  // Shared memory name
-#define SHM_SIZE 3908  // Shared memory size
+#define SHM_SIZE 3908
+#define SHM_KEY 4755
 
 
 int main(int argc, char *argv[]) {
@@ -37,16 +37,14 @@ int main(int argc, char *argv[]) {
     float gamma = atof(argv[5]);
     int numParticles = atoi(argv[6]);
     int coresToUse = atoi(argv[7]);
-    
-    // Step for GUI
-    int step = 50;
+    int step = 50; // How many iterations to run before sending data
 
-    pcg32_random_t *rng_states = malloc(coresToUse * sizeof(pcg32_random_t));
-    // Allocate memory for the RNG states for all threads before the parallel region
-    if (!rng_states) {
-        fprintf(stderr, "Memory allocation failed for RNG states\n");
-        exit(1);
-    }
+    // Behavior calculations
+    float moveDistance = sqrt(2 * diffCon * deltaT);
+    int increments = (int)floor(timeConst / deltaT);
+    float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
+    float jumpProb = gamma * deltaT;
+    float shiftValue = deltaT * bSpin;
 
     if (coresToUse > omp_get_num_procs()) {
         printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
@@ -55,33 +53,30 @@ int main(int argc, char *argv[]) {
         printf("Using %d threads.\n", coresToUse);
     }
     omp_set_num_threads(coresToUse);
-    initialize_rng_states(coresToUse, rng_states);
 
-    float moveDistance = sqrt(2 * diffCon * deltaT);
-    int increments = (int)floor(timeConst / deltaT);
-    float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
-    float jumpProb = gamma * deltaT;
-    float shiftValue = deltaT * bSpin;
-
-    //printf("--------- Behavior ---------\n");
-    //printf("Increments:          %d\nNumber of Particles: %d\nMove Distance:       %.4f\nMove Probability:    %.4f\nJump Probability:    %.4f\nShift Value:         %.4f\n", increments, numParticles, moveDistance, moveProb, jumpProb, shiftValue);
-    //printf("----------------------------\n");
-
+    // Storage to hold each thread's rng state
+    pcg32_random_t *rng_states = malloc(coresToUse * sizeof(pcg32_random_t));
+    // Storage to hold particles to be moved by simulation
     Particle *particleListProb = malloc(numParticles * sizeof(Particle));
-    ParticleDataList *freqList = malloc(sizeof(ParticleDataList));  // Allocate memory for freqList
-    if (freqList == NULL) {
-        perror("Failed to allocate memory for freqList");
+    // Confirm allocation for all
+    if (rng_states == NULL || particleListProb == NULL) {
+        perror("Failed to allocate memory, returning");
         exit(EXIT_FAILURE);
     }
-    printf("Clearing memory for freq list\n");
-    memset(freqList, 0, sizeof(ParticleDataList));  // Clear memory
-
-    //Particle *parti   cleListStep = malloc(numParticles * sizeof(Particle));
-    if (!particleListProb) {
-        fprintf(stderr, "Memory allocation failed for particle lists\n");
-        return 1;
-    }
     
+    // Clear memory for each allocation to ensure proper data storage
+    printf("Clearing memory for rng_states\n");
+    memset(rng_states, 0, coresToUse * sizeof(pcg32_random_t));
+    printf("Clearing memory for particleListProb\n");
+    memset(particleListProb, 0, numParticles * sizeof(Particle));
+
+    // Create shared memory block to send data elsewhere
+    int shm_id = shmget(SHM_KEY, sizeof(ParticleDataList), IPC_CREAT | 0666);
+
+    // Set unique states for each thread, used for randomness
+    initialize_rng_states(coresToUse, rng_states);
+
+    // Generate particles within particle list, this is where origins are defined
     initializeParticles(particleListProb, numParticles);
     //initializeParticles(particleListStep, numParticles);
 
@@ -91,64 +86,46 @@ int main(int argc, char *argv[]) {
     int numMovesProb = 0;
     int numJumpsProb = 0; 
 
-   
-    int shm_id = shmget(SHM_KEY, SHM_SIZE, IPC_CREAT | 0666);
-    struct shmid_ds shm_info;
-    
-    // Pointer to the first part of the shared memory (data + size + flag)
-    ParticleDataList *particleDataList = (ParticleDataList*)shmat(shm_id, NULL, 0);
-    if (particleDataList == NULL) {
-        perror("Failed to allocate memory for particleDataList");
-        exit(EXIT_FAILURE);
-    }
-    printf("Clearing memory for particledatalist\n");
-    memset(particleDataList, 0, SHM_SIZE);
-
-    int *data_size = (int*)shmat(shm_id, NULL, 0);  // To store the number of particles
-    int *updated_flag = (int*)(shmat(shm_id, NULL, 0) + sizeof(int));  // To store updated flag
-    printf("Stored number of particles and flag: %ls, %ls   \n", data_size, updated_flag);
-    // Clear the memory (this should be done before writing new data)
-
-
     // Increments are set here
     printf("Began computing...\n");
     for (int i = 0; i < increments; i++) {
-        // One thread moves two particles
+        
+        // Move particles
         #pragma omp parallel for
-        for (int j = 0; j < numParticles; j++) {
+        for (int j = 0; j < numParticles; j++)
+        {
             moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance, rng_states);
             //moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance);
         }
-        if (i % step == 0)
+
+        if (i % step == 0 && i != 0)
         {
             // Send data to python
             printf("Waiting for python...\n");
-            while (freqList->read == false)
+            while (shared_memory->read == false)
             {
                 // Optional: Sleep for a brief moment to avoid excessive CPU usage
                 sleep(0.5);
             }
-            int freqCount = 0;
-            // Send data to python here
-            particlesToFrequency(particleListProb, numParticles, &freqList, &freqCount);
-            for (int j = 0; j < freqCount; j++)
+            
             #pragma omp single
             {
-                // Update shared memory
-                particleDataList->particles[j].x = freqList->particles[j].x;
-                particleDataList->particles[j].y = freqList->particles[j].y;
-                particleDataList->particles[j].freqx = freqList->particles[j].freqx;
-                
+                // Send data to python here
+                particlesToFrequency(particleListProb, numParticles, &shared_memory);   
             }
-            particleDataList->read = false;
         }
     }
 
     double simEnd = omp_get_wtime();
     printf("Simulation completed in %.2f seconds\n", simEnd - simStart);
 
+    // Detach the shared memory segment
+    if (shmdt(shared_memory) == -1) {
+        perror("shmdt");
+        exit(EXIT_FAILURE);
+    }
+
     free(particleListProb);
-    free(freqList);  // If freqList was dynamically allocated
 
     //free(particleListStep);
     free(rng_states);

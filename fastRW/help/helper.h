@@ -31,7 +31,7 @@ typedef struct {
 
 typedef struct {
     DataParticle particles[325];   
-    int count;                  // Number of top particles
+    int count;
     bool read;
 } ParticleDataList;
 
@@ -43,5 +43,5 @@ bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float 
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
 void initialize_rng_states(int num_threads, pcg32_random_t *rng_states);
 // Function to convert particles to frequency list
-void particlesToFrequency(Particle particles[], int numParticles, ParticleDataList **freqList, int *freqCount);
+void particlesToFrequency(Particle particles[], int numParticles, ParticleDataList **freqList);
 #endif

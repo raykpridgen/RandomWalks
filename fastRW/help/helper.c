@@ -130,51 +130,54 @@ void initialize_rng_states(int num_threads, pcg32_random_t *rng_states) {
 }
 
 
-void particlesToFrequency(Particle particles[], int numParticles, ParticleDataList **freqList, int *freqCount) 
+void particlesToFrequency(Particle particles[], int numParticles, ParticleDataList **freqList) 
 {
+    printf("Starting part to freq...\n");
     // Temporary list to hold the frequencies of unique x values
     DataParticle *tempList = malloc(numParticles * sizeof(DataParticle));
-
+    
     if (tempList == NULL) {
         perror("Memory allocation failed");
         exit(1);
     }
 
+    // Clear particle data list
+    for (int i = 0; i < 325; i++)
+    {
+        (*freqList)->particles[i].x = 0;
+        (*freqList)->particles[i].y = 0;
+        (*freqList)->particles[i].freqx = 0;
+    }
+
     // Initialize frequency counts
-    *freqCount = 0;
+     int freqCount = 0;
 
     // Process each particle in the input list
     for (int i = 0; i < numParticles; i++) {
+        // Flag for finding a matching particle
         bool found = false;
-
-        // If the particle is in the top (y == 1), process for the top list
-        for (int j = 0; j < *freqCount; j++) {
-            if (tempList[j].x == particles[i].x && tempList[j].y == particles[i].y) {
-                tempList[j].freqx += 1;  // Increment the frequency for top
-                found = true;
-                break;
+        if (freqCount != 0)
+        {
+            for (int j = 0; j < freqCount; j++) {
+                // If a particle in the list matches the same location of another
+                if (tempList[j].x == particles[i].x && tempList[j].y == particles[i].y) {
+                    // increment counter in freqx
+                    tempList[j].freqx += 1;
+                    found = true;
+                    break;
+                }
             }
         }
 
-        // If the x value wasn't found, add a new entry for top
+        // If the x value wasn't found, add a new entry
         if (!found) {
-            tempList[*freqCount].x = particles[i].x;
-            tempList[*freqCount].y = particles[i].y;
-
-            tempList[*freqCount].freqx = 1;  // Initialize frequency to 1 for top
-            (*freqCount)++;  // Increase the count of unique x values for top
+            tempList[freqCount].x = particles[i].x;
+            tempList[freqCount].y = particles[i].y;
+            tempList[freqCount].freqx = 1;  
+            (freqCount)++;  // Increase the count of unique x values
         }
     }
-
-    // Set bottom particles for full function
-    for (int i = 0; i < numParticles; i++)
-    {
-        if (tempList[i].y == 0)
-        {
-            tempList[i].freqx = -1 * tempList[i].freqx;
-        }
-    }
-
+    
     // Allocate memory for the ParticleDataList if it is not allocated yet
     if (*freqList == NULL) {
         printf("FreqList just allocd in particlesToFrequency\n");
@@ -186,13 +189,32 @@ void particlesToFrequency(Particle particles[], int numParticles, ParticleDataLi
         }
     }
 
-    // Reallocate the particles array in freqList to hold the correct amount of DataParticles
-    (*freqList)->count = *freqCount;
-    memcpy((*freqList)->particles, tempList, *freqCount * sizeof(DataParticle));
+    // Change particle count
+    (*freqList)->count = freqCount;
 
-    // Optionally, set read flag to true
-    (*freqList)->read = true;
+    // Set each value for each frequency
+    for (int k = 0; k < freqCount; k++)
+    {
+        (*freqList)->particles[k] = tempList[k];
+        // Convert int number into proper frequency
+        if ((*freqList)->particles[k].y == 1)
+        {
+            (*freqList)->particles[k].freqx = (*freqList)->particles[k].freqx / numParticles;
+        }
+        else
+        {
+            (*freqList)->particles[k].freqx = (*freqList)->particles[k].freqx / -numParticles;
+        }
+    }
 
     // Clean up
     free(tempList);
+
+    // Set read flag to false
+    (*freqList)->read = false;
+
+    if (shmdt(freqList) == -1) {
+        perror("shmdt failed");
+        exit(1);
+    }
 }
