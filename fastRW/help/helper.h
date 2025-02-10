@@ -14,13 +14,14 @@
 #include <unistd.h> 
 #include "../pcg_basic.h"
 
+#define PARTICLE_COUNT 325
 #ifndef HELPER_H
 #define HELPER_H
 
 
 typedef struct {
     float x;
-    int y;
+    float y;
 } Particle;
 
 typedef struct {
@@ -30,9 +31,9 @@ typedef struct {
 } DataParticle;
 
 typedef struct {
-    DataParticle particles[325];   
+    DataParticle particles[PARTICLE_COUNT];   
     int count;
-    bool read;
+    int read;
 } ParticleDataList;
 
 
@@ -43,5 +44,7 @@ bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float 
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
 void initialize_rng_states(int num_threads, pcg32_random_t *rng_states);
 // Function to convert particles to frequency list
-void particlesToFrequency(Particle particles[], int numParticles, ParticleDataList **freqList);
+ParticleDataList particlesToFrequency(Particle particles[], int numParticles);
+int sharedMemory(ParticleDataList send);
+float roundValue(float number, int decimals);
 #endif

@@ -12,8 +12,14 @@
 #include <sys/stat.h>  // For mode constants (0666)
 #include <string.h>  // For memset() (if needed)
 #include <unistd.h> 
+#include <sys/ipc.h>
+#include <sys/shm.h> 
+#include <errno.h>
 #include "../pcg_basic.h"
 #include "helper.h"
+
+#define SHM_NAME "/particle_shm"
+#define PARTICLE_COUNT 325
 
 
 
@@ -42,7 +48,8 @@ bool moveParticleProb(Particle *particle, float jumpProb, float moveProb, float 
             moveProb = 1 - moveProb;
         }
         if (moveRand < moveProb) {
-            particle->x += moveDistance;
+            float movedistcalc = particle->x + moveDistance;
+            particle->x = round(movedistcalc );
         } else {
             particle->x -= moveDistance;
         }
@@ -96,7 +103,7 @@ void exportParticlesToCSV(Particle particles[], int numParticles, const char *fi
 
     fprintf(file, "x,y\n");
     for (int i = 0; i < numParticles; i++) {
-        fprintf(file, "%.3f,%d\n", particles[i].x, particles[i].y);
+        fprintf(file, "%.3f,%f\n", particles[i].x, particles[i].y);
     }
     fclose(file);
 }
@@ -108,7 +115,6 @@ float moveProbCalc(float D, float b, float dt) {
         return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b)))); 
     }
 }
-
 
 void initialize_rng_states(int num_threads, pcg32_random_t *rng_states) {
 
@@ -129,28 +135,18 @@ void initialize_rng_states(int num_threads, pcg32_random_t *rng_states) {
     }
 }
 
-
-void particlesToFrequency(Particle particles[], int numParticles, ParticleDataList **freqList) 
+ParticleDataList particlesToFrequency(Particle particles[], int numParticles) 
 {
     printf("Starting part to freq...\n");
-    // Temporary list to hold the frequencies of unique x values
-    DataParticle *tempList = malloc(numParticles * sizeof(DataParticle));
     
-    if (tempList == NULL) {
-        perror("Memory allocation failed");
-        exit(1);
-    }
+    ParticleDataList frequencies;
 
-    // Clear particle data list
-    for (int i = 0; i < 325; i++)
-    {
-        (*freqList)->particles[i].x = 0;
-        (*freqList)->particles[i].y = 0;
-        (*freqList)->particles[i].freqx = 0;
-    }
+    frequencies.count = 0;
+    // this is just for isntance, never used
+    frequencies.read = 0;
 
     // Initialize frequency counts
-     int freqCount = 0;
+    int freqCount = 0;
 
     // Process each particle in the input list
     for (int i = 0; i < numParticles; i++) {
@@ -158,11 +154,12 @@ void particlesToFrequency(Particle particles[], int numParticles, ParticleDataLi
         bool found = false;
         if (freqCount != 0)
         {
-            for (int j = 0; j < freqCount; j++) {
+            for (int j = 0; j < freqCount; j++) 
+            {
                 // If a particle in the list matches the same location of another
-                if (tempList[j].x == particles[i].x && tempList[j].y == particles[i].y) {
+                if (frequencies.particles[j].x == particles[i].x && frequencies.particles[j].y == particles[i].y) {
                     // increment counter in freqx
-                    tempList[j].freqx += 1;
+                    frequencies.particles[j].freqx += 1;
                     found = true;
                     break;
                 }
@@ -171,50 +168,106 @@ void particlesToFrequency(Particle particles[], int numParticles, ParticleDataLi
 
         // If the x value wasn't found, add a new entry
         if (!found) {
-            tempList[freqCount].x = particles[i].x;
-            tempList[freqCount].y = particles[i].y;
-            tempList[freqCount].freqx = 1;  
+            printf("Not found, particle added %d\n", freqCount);
+            if (freqCount > PARTICLE_COUNT) 
+            {
+                printf("Warning: Maximum particle count reached!\n");
+                break;
+            }
+            frequencies.particles[freqCount].x = particles[freqCount].x;
+            frequencies.particles[freqCount].y = particles[freqCount].y;
+            frequencies.particles[freqCount].freqx = 1;
             (freqCount)++;  // Increase the count of unique x values
-        }
-    }
-    
-    // Allocate memory for the ParticleDataList if it is not allocated yet
-    if (*freqList == NULL) {
-        printf("FreqList just allocd in particlesToFrequency\n");
-        *freqList = malloc(sizeof(ParticleDataList));
-        if (*freqList == NULL) {
-            perror("Memory allocation failed for ParticleDataList");
-            free(tempList);
-            exit(1);
         }
     }
 
     // Change particle count
-    (*freqList)->count = freqCount;
+    frequencies.count = freqCount;
+    return frequencies;
+}
 
-    // Set each value for each frequency
-    for (int k = 0; k < freqCount; k++)
+int sharedMemory(ParticleDataList send)
+{
+    int shm_fd;
+    int created = 0;
+
+    // Try to open existing shared memory
+    shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
+    
+    // If it doesn't exist, create it
+    if (shm_fd == -1) 
     {
-        (*freqList)->particles[k] = tempList[k];
-        // Convert int number into proper frequency
-        if ((*freqList)->particles[k].y == 1)
+        if (errno == ENOENT) 
         {
-            (*freqList)->particles[k].freqx = (*freqList)->particles[k].freqx / numParticles;
+            printf("Shared memory not found, creating new segment...\n");
+            shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+            created = 1;
+        }
+        if (shm_fd == -1) 
+        {
+            perror("shm_open failed");
+            close(shm_fd);
+            return 1;
+        }
+    }
+
+    // Set shared memory size if newly created
+    if (created) 
+    {
+        if (ftruncate(shm_fd, sizeof(ParticleDataList)) == -1) 
+        {
+            perror("ftruncate failed");
+            close(shm_fd);
+            return 1;
+        }
+    }
+
+    // Map shared memory
+    ParticleDataList *shared_data = mmap(NULL, sizeof(ParticleDataList), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shared_data == MAP_FAILED) 
+    {
+        perror("mmap failed");
+        munmap(shared_data, sizeof(ParticleDataList));
+        close(shm_fd);
+        return 1;
+    }
+    if (created)
+    {
+        memset(shared_data, 0, sizeof(ParticleDataList));
+        shared_data->count = send.count;
+        memcpy(shared_data->particles, send.particles, sizeof(DataParticle) * send.count);
+        shared_data->read = 0;
+    }
+    else
+    {
+        // Ensure C always leaves an even read flag
+        if (shared_data->read % 2 == 1) 
+        {
+            shared_data->read += 1;  // Make even (ensuring Python acknowledges update)
         }
         else
         {
-            (*freqList)->particles[k].freqx = (*freqList)->particles[k].freqx / -numParticles;
+            // Python has not yet read, return 1
+            munmap(shared_data, sizeof(ParticleDataList));
+            close(shm_fd);
+            return 1;
         }
+        // Copy new data into shared memory
+        shared_data->count = send.count;
+        memcpy(shared_data->particles, send.particles, sizeof(DataParticle) * send.count);
     }
 
-    // Clean up
-    free(tempList);
+    // Force write to memory
+    fsync(shm_fd);
 
-    // Set read flag to false
-    (*freqList)->read = false;
+    // Cleanup
+    munmap(shared_data, sizeof(ParticleDataList));
+    close(shm_fd);
+    return 0;
+}
 
-    if (shmdt(freqList) == -1) {
-        perror("shmdt failed");
-        exit(1);
-    }
+float roundValue(float number, int decimals)
+{
+    float multiple = powf(10.0f, decimals); // Use float-specific powf()
+    return roundf(number * multiple) / multiple;
 }

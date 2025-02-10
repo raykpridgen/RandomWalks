@@ -14,7 +14,17 @@
 #include <unistd.h> 
 #include "../pcg_basic.h"
 #include "helper.h"
-int main()
+int testRoundFunction(float round, int decimal, float expected)
+{
+    float returned = roundValue(round, decimal);
+    if (returned != expected)
+    {
+        printf("Not the same.\nReturned: %f \nExpected: %f", returned, expected);
+        return 1;
+    }
+    return 0;
+}
+int testFreqCountDPL()
 {
     ParticleDataList *freqList = NULL;
     int freqCount = 0;
@@ -26,7 +36,7 @@ int main()
     };
 
     int numParticles = 4;
-    particlesToFrequency(particleList, numParticles, &freqList, &freqCount);
+    *freqList = particlesToFrequency(particleList, numParticles);
 
     // Debugging: Check if freqCount is correct
     printf("Final freqCount: %d\n", freqCount);
@@ -36,5 +46,44 @@ int main()
     {
         printf("X: %f \nY: %f\n\n", freqList->particles[i].x, freqList->particles[i].freqx);
     }
+
+}
+
+int testMoveDistanceRounding(float diffCon, float deltaT)
+{
+    float moveDistance = sqrt(2 * diffCon * deltaT);
+    printf("Move Distance Raw: %f\n", moveDistance);
+    return 0;
+}
+
+int main()
+{
+    int success1 = testRoundFunction(4.05647583, 5, 4.05648);
+    if (success1 == 0)
+    {
+        printf("Succeeded.\n");
+    }
+    else
+    {
+        printf("Failed.\n");
+    }
+    float initDt = 1;
+    printf("DT: %f\n", initDt);
+    int success2 = testMoveDistanceRounding(1, initDt);
+    initDt = 0.1;
+    printf("DT: %f\n", initDt);
+    success2 = testMoveDistanceRounding(1, initDt);
+
+    initDt = 0.01;
+    printf("DT: %f\n", initDt);
+    success2 = testMoveDistanceRounding(1, initDt);
+
+    initDt = 0.001;
+    printf("DT: %f\n", initDt);
+    success2 = testMoveDistanceRounding(1, initDt);
+
+
+    
+    return 0;
 }
 

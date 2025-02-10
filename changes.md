@@ -193,3 +193,18 @@ This caused the implementation of:
 Current problem:
 I run into a seg fault traces right to when the random states get initialized.
 Not sure how to stop this, I have been using valgrind and the sanitizer flag. Chat GPT is no help.
+
+# 1/31/2025
+
+Continually debugging the shared memory
+Fixed small things with parallel version
+I need to attach and detach from the memory each time to ensure(?) updating of data
+
+## Future plans
+Potentially revisit random number generation
+GUI updates
+New Y? 
+
+# 02/06/2025
+Changes: Need to fix rounding with particle distance so there is no
+data overflow in the shared memory

@@ -11,6 +11,8 @@ import subprocess
 import sysv_ipc
 import struct
 import ctypes
+import os
+import mmap
 
 
 # Define the DataParticle structure
@@ -31,26 +33,16 @@ class ParticleDataList(ctypes.Structure):
 
 class MainWindow(QMainWindow):
 
-    SHM_SIZE = 3908  # Define the shared memory size in bytes. Adjust as necessary.
-    SHM_KEY = 4755
-
-    particle_count = 325
-    particle_format = "fff"  # Format for one particle (float x, y, freqx)
-    particle_list_format = f"{particle_count * 3}f i 3x ?" 
+    SHM_NAME = "/particle_shm"
+    PARTICLE_COUNT = 325
+    STRUCT_FORMAT = f"{PARTICLE_COUNT * 3}f ii"
+    STRUCT_SIZE = struct.calcsize(STRUCT_FORMAT)
 
     def __init__(self):
         super().__init__()
         self.xVals = []
         self.yVals = []
         self.freqVals = []
-        
-        # Setup shared memory (key should match C program)
-        try:
-            # Open the shared memory segment
-            self.shm = sysv_ipc.SharedMemory(self.SHM_KEY)
-        except sysv_ipc.ExistentialError:
-            print("Shared memory segment not found.")
-            exit(1)
 
         # Window properties
         self.setWindowTitle("Particle Simulation")
@@ -82,7 +74,7 @@ class MainWindow(QMainWindow):
         # === SLIDERS / SPINBOXES ===
         self.T_slider = QSpinBox()  # T: Integer, fast adjustment
         self.T_slider.setRange(10, 10000)
-        self.T_slider.setValue(1000)
+        self.T_slider.setValue(10)
 
         self.b_slider = QSlider(Qt.Orientation.Horizontal)  # b: -1 to 1
         self.b_slider.setRange(-100, 100)
@@ -94,7 +86,7 @@ class MainWindow(QMainWindow):
 
         self.particles_slider = QSlider(Qt.Orientation.Horizontal)  # Particles: Up to 100,000
         self.particles_slider.setRange(1, 100000)
-        self.particles_slider.setValue(1000)
+        self.particles_slider.setValue(200)
 
         # === ADD TO CONTROL PANEL ===
         self.control_layout.addRow(QLabel("dt:"), self.dt_input)
@@ -115,6 +107,7 @@ class MainWindow(QMainWindow):
         print("Before sim reset\n")
         self.reset_simulation()
         self.timer = pg.QtCore.QTimer()
+        
         self.timer.timeout.connect(self.update_plot)
         self.timer.start(50) # 50 ms ticks
 
@@ -141,52 +134,38 @@ class MainWindow(QMainWindow):
     def read_shared_memory(self):
         print("read_shared_memory\n")
         """ Reads complex data structure from shared memory. """
-        buffer = self.shm.read()
-        if len(buffer) != ctypes.sizeof(ParticleDataList):
-            raise RuntimeError(f"Shared memory size mismatch: expected {ctypes.sizeof(ParticleDataList)}, got {len(buffer)}")
+        # Try to open shared memory
+        try:
+            shm_fd = os.open(f"/dev/shm{self.SHM_NAME}", os.O_RDWR)
+            shm = mmap.mmap(shm_fd, self.STRUCT_SIZE, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
+        except FileNotFoundError:
+            raise FileNotFoundError("Shared memory does not exist.\n")
+        
+        # Read flag
+        read_offset = self.STRUCT_SIZE - 4
+        current_read = struct.unpack("i", shm[read_offset:read_offset + 4])[0]
+        if current_read % 2 == 1:
+                        
+            shm.close()
+            os.close(shm_fd)
+            return [], current_read, []
 
-        unpacked = struct.unpack(self.particle_list_format, buffer)
+        # Unpack particles
+        num_floats = self.PARTICLE_COUNT * 3
+        STRUCT_FORMAT_PARTICLES = f"{num_floats}f"
+        particles = struct.unpack(STRUCT_FORMAT_PARTICLES, shm[:num_floats * 4])
 
-        count = unpacked[self.particle_count * 3]
-        read_flag = unpacked[self.particle_count * 3 + 1]
+        # Make particles list
+        particles_list = [particles[i:i+3] for i in range(0, len(particles), 3)]
+        
+        new_read = current_read + 1
 
-        print(f"Count: {count}")
-        print(f"Read: {read_flag}")
+        shm[read_offset:read_offset + 4] = struct.pack("i", new_read)
+        shm.flush()
+        shm.close()
+        os.close(shm_fd)
 
-        # Unpack the data:
-        if not read_flag:
-            print("python reads flag as false, begins reading data\n")
-
-            newParticles = []
-
-            check = False
-
-            for i in range(count):
-                x, y, freqx = unpacked[i * 3 : (i * 3) + 3]
-                if freqx[i] > 0:
-                    check = True
-                newParticles.extend([x, y, freqx])
-                
-            sendSetup = ParticleDataList()
-            sendSetup.read = True
-            self.shm.write(bytearray(sendSetup))
-
-            buffer = self.shm.read()
-            updated_data = ParticleDataList.from_buffer_copy(buffer)
-
-            print("Updated read flag:", updated_data.read)
-            
-            if not check:
-                print("No data in incoming list. returning.\n")
-                return [], read_flag, []
-
-            
-            print("Memory was available\n")
-            return count, False, newParticles
-        else:
-            print("No memory available\n")
-            print(f"Read flag: {read_flag}")
-            return [], read_flag, []
+        return len(particles), new_read, particles_list
 
     def update_plot(self):
         print("update_plot\n")
@@ -194,14 +173,23 @@ class MainWindow(QMainWindow):
         
         if self.process.poll() is not None: 
             self.timer.stop()  # This will stop the timer from triggering the update function
-            print("C process ended\n")
+            print("C process ended.\n")
+            stdout, stderr = self.process.communicate()  # This will block until the process finishes
+
+            # Decode byte output to strings
+            stdout_decoded = stdout.decode("utf-8")
+            stderr_decoded = stderr.decode("utf-8")
+
+            print(f"Output: {stdout_decoded}\n")
+            print(f"Error: {stderr_decoded}\n")
+
             return 0
 
         # Read shared memory if C is running
         count, read_flag, particles = self.read_shared_memory()
 
         # If data has not been read by Python
-        if not read_flag:  # Only update if 'read' flag is not set, ie new
+        if read_flag % 2 == 0:  # Only update if 'read' flag is not set, ie new
             print("flag coming out of read_shared_memory says false, processing data\n")
             # Optionally, update the plot with multiple curves (one for each attribute)
             # You can plot `x` vs `y` and `x` vs `freqx`, or overlay all in a single plot
@@ -210,9 +198,11 @@ class MainWindow(QMainWindow):
             self.yVals = []
             self.freqVals = []
 
-            for l in particles:
-                self.xVals, self.yVals, self.freqVals = particles[l * 3 : (l * 3) + 3]
-            
+            for x, y, freq in particles:
+                self.xVals.append(x)
+                self.yVals.append(y)
+                self.freqVals.append(freq)
+
             # Example of setting the data for plotting (you may want multiple plots or combine them)
             # If you want to plot freqx as a separate curve, you can add another curve:
             # self.curve_freqx.setData(self.x, self.freqx)
@@ -237,16 +227,27 @@ class MainWindow(QMainWindow):
 
         # Terminate C program if running
         if self.process and self.process.poll() is None:
-            print("Terminating subprocess...")
             self.process.terminate()  # Gracefully terminate
+            
+            print("Terminating subprocess...")
+            print("C process ended.\n")
+            stdout, stderr = self.process.communicate()  # This will block until the process finishes
+
+            # Decode byte output to strings
+            stdout_decoded = stdout.decode("utf-8")
+            stderr_decoded = stderr.decode("utf-8")
+
+            print(f"Output: {stdout_decoded}\n")
+            print(f"Error: {stderr_decoded}\n")
+            
+            
+            
             try:
                 self.process.wait(timeout=2)  # Wait up to 2 sec
             except subprocess.TimeoutExpired:
                 print("Forcing subprocess termination...")
                 self.process.kill()  # Kill if it hangs
 
-        # Close shared memory
-        self.shm.detach()  # Detach from SysV shared memory
 
         event.accept()  # Allow window to close
 

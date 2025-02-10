@@ -17,8 +17,8 @@
 #include "pcg_basic.h"
 #include "help/helper.h"
 
-#define SHM_SIZE 3908
-#define SHM_KEY 4755
+#define SHM_NAME "/particle_shm"
+#define PARTICLE_COUNT 325
 
 
 int main(int argc, char *argv[]) {
@@ -40,11 +40,11 @@ int main(int argc, char *argv[]) {
     int step = 50; // How many iterations to run before sending data
 
     // Behavior calculations
-    float moveDistance = sqrt(2 * diffCon * deltaT);
+    float moveDistance = roundValue(sqrt(2 * diffCon * deltaT), 2);
     int increments = (int)floor(timeConst / deltaT);
     float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
     float jumpProb = gamma * deltaT;
-    float shiftValue = deltaT * bSpin;
+    float shiftValue = roundValue(deltaT * bSpin, 2);
 
     if (coresToUse > omp_get_num_procs()) {
         printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
@@ -69,9 +69,6 @@ int main(int argc, char *argv[]) {
     memset(rng_states, 0, coresToUse * sizeof(pcg32_random_t));
     printf("Clearing memory for particleListProb\n");
     memset(particleListProb, 0, numParticles * sizeof(Particle));
-
-    // Create shared memory block to send data elsewhere
-    int shm_id = shmget(SHM_KEY, sizeof(ParticleDataList), IPC_CREAT | 0666);
 
     // Set unique states for each thread, used for randomness
     initialize_rng_states(coresToUse, rng_states);
@@ -100,30 +97,42 @@ int main(int argc, char *argv[]) {
 
         if (i % step == 0 && i != 0)
         {
+            printf("Step called, data transfer\n");
             // Send data to python
-            printf("Waiting for python...\n");
-            while (shared_memory->read == false)
-            {
-                // Optional: Sleep for a brief moment to avoid excessive CPU usage
-                sleep(0.5);
-            }
-            
+            int quit = 0;
             #pragma omp single
             {
-                // Send data to python here
-                particlesToFrequency(particleListProb, numParticles, &shared_memory);   
+                // Convert data to frequencies
+                ParticleDataList frequencies = particlesToFrequency(particleListProb, numParticles);
+                // Send the data to Python
+                int memMessage = sharedMemory(frequencies);
+                int memCount = 0;
+                while (memMessage == 1 && memCount < 10)
+                {   
+                    // Pause and run again until python catches up
+                    sleep(1);
+                    memMessage = sharedMemory(frequencies);
+                    memCount += 1;
+                }  
+                if (memCount == 10)
+                {
+                    printf("Python timed out. Returning.\n");
+                    free(particleListProb);
+
+                    //free(particleListStep);
+                    free(rng_states);
+                    quit = 1;
+                }
+            }
+            if (quit == 1)
+            {
+                return 1;
             }
         }
     }
 
     double simEnd = omp_get_wtime();
     printf("Simulation completed in %.2f seconds\n", simEnd - simStart);
-
-    // Detach the shared memory segment
-    if (shmdt(shared_memory) == -1) {
-        perror("shmdt");
-        exit(EXIT_FAILURE);
-    }
 
     free(particleListProb);
 
