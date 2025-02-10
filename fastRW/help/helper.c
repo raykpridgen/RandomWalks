@@ -104,7 +104,8 @@ float moveProbCalc(float D, float b, float dt) {
     }
 }
 
-void initialize_rng_states(int num_threads) {
+void initialize_rng_states(int num_threads) 
+{
     #pragma omp parallel
     {
         // Allocate rng_states for each thread
@@ -117,4 +118,10 @@ void initialize_rng_states(int num_threads) {
         // Initialize each thread's rng state
         pcg32_srandom_r(&rng_states[thread_id], time(NULL) ^ thread_id, thread_id);
     }
+}
+    
+float roundValue(float number, int decimals)
+{
+    float multiple = powf(10.0f, decimals); // Use float-specific powf()
+    return roundf(number * multiple) / multiple;
 }

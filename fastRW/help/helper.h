@@ -31,5 +31,5 @@ float moveProbCalc(float D, float b, float dt);
 
 void initialize_rng_states(int num_threads);
 
-
+float roundValue(float number, int decimals);
 #endif // HELPER_H

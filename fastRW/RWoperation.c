@@ -46,11 +46,11 @@ int main(int argc, char *argv[]) {
     omp_set_num_threads(coresToUse);
     initialize_rng_states(coresToUse);
 
-    float moveDistance = sqrt(2 * diffCon * deltaT);
+    float moveDistance = roundValue(sqrt(2 * diffCon * deltaT), 2);
     int increments = (int)floor(timeConst / deltaT);
     float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
     float jumpProb = gamma * deltaT;
-    float shiftValue = deltaT * bSpin;
+    float shiftValue = roundValue((deltaT * bSpin), 2);
 
     printf("--------- Behavior ---------\n");
     printf("Increments:          %d\nNumber of Particles: %d\nMove Distance:       %.4f\nMove Probability:    %.4f\nJump Probability:    %.4f\nShift Value:         %.4f\n", increments, numParticles, moveDistance, moveProb, jumpProb, shiftValue);
