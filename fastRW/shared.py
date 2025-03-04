@@ -3,7 +3,7 @@ import mmap
 import os
 import subprocess
 SHM_NAME = "/particle_shm"
-PARTICLE_COUNT = 500
+PARTICLE_COUNT = 325
 STRUCT_FORMAT = f"{PARTICLE_COUNT * 3}f ii"
 STRUCT_SIZE = struct.calcsize(STRUCT_FORMAT)
 
@@ -15,7 +15,7 @@ g = 0
 particles = 1000
 cores = 4
 command = [
-    "../../RWoperation", str(dt), str(T), str(D), str(b), str(g), str(particles), str(cores)
+    "./RWoperation", str(dt), str(T), str(D), str(b), str(g), str(particles), str(cores)
 ]
 print("C program was called\n")
 print(command)

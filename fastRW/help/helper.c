@@ -7,10 +7,10 @@
 #include <stdlib.h>
 #include <float.h>
 #include <limits.h>
-#include <fcntl.h>  // For shm_open() flags (O_CREAT, O_RDWR)
+#include <fcntl.h>     // For shm_open() flags (O_CREAT, O_RDWR)
 #include <sys/mman.h>  // For mmap(), MAP_SHARED
 #include <sys/stat.h>  // For mode constants (0666)
-#include <string.h>  // For memset() (if needed)
+#include <string.h>    // For memset() (if needed)
 #include <unistd.h> 
 #include <sys/ipc.h>
 #include <sys/shm.h> 
@@ -35,7 +35,7 @@ void initializeParticles(Particle partList[], int numParts) {
     return;
 }
 
-bool moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance, pcg32_random_t *rng_states) {
+bool moveParticleProb(Particle *particle, float jumpProb, float moveProb, pcg32_random_t *rng_states) {
     #pragma omp barrier
     int thread_id = omp_get_thread_num();
     float jumpRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
@@ -48,10 +48,10 @@ bool moveParticleProb(Particle *particle, float jumpProb, float moveProb, float 
             moveProb = 1 - moveProb;
         }
         if (moveRand < moveProb) {
-            float movedistcalc = particle->x + moveDistance;
+            float movedistcalc = particle->x + 1;
             particle->x = round(movedistcalc );
         } else {
-            particle->x -= moveDistance;
+            particle->x -= 1;
         }
         return false;
     }

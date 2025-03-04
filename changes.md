@@ -208,3 +208,33 @@ New Y?
 # 02/06/2025
 Changes: Need to fix rounding with particle distance so there is no
 data overflow in the shared memory
+
+# 2/13/2025
+Added rounding function, changed the way function operates
+Now: 
+- Simulation runs with move distance set at 1
+- Converts to actual move distance at the end
+
+I also need to completely refactor and simplify a lot of this code. 
+too much experimkenmting has led it to be pretty unreadable an ddependent
+
+ Found a game changing bug
+ Need to rework top down
+ Starting and only using heap / shared memory
+ Heavy on the pointers
+ 
+# 2/18/25
+Future reference: Maybe reduce number of rand generations from 2 to 1 per particle
+
+first RNG: 0 - 1
+compared with a value, either moves and completes, or:
+second RNG: 0 - 1, compared with another value
+
+instead, 
+
+first RNG: 0 - 1
+compared with a value, either moves and completes, or:
+if fails, means RNG is less than
+checkedValue - RNG = (0 : 1) another float
+Multiply float up to int value, check even or odd
+Now only one RNG operation was used

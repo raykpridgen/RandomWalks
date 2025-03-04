@@ -46,6 +46,7 @@ int main(int argc, char *argv[]) {
     float jumpProb = gamma * deltaT;
     float shiftValue = roundValue(deltaT * bSpin, 2);
 
+    // error detection for incorrect cores
     if (coresToUse > omp_get_num_procs()) {
         printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
         coresToUse = omp_get_num_procs();
@@ -91,7 +92,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel for
         for (int j = 0; j < numParticles; j++)
         {
-            moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance, rng_states);
+            moveParticleProb(&particleListProb[j], jumpProb, moveProb, rng_states);
             //moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance);
         }
 
@@ -104,6 +105,11 @@ int main(int argc, char *argv[]) {
             {
                 // Convert data to frequencies
                 ParticleDataList frequencies = particlesToFrequency(particleListProb, numParticles);
+                // Now apply move distance to each X
+                for (int k = 0; i < frequencies.count; k++)
+                {
+                    frequencies.particles[k].x = frequencies.particles[k].x * moveDistance;
+                }
                 // Send the data to Python
                 int memMessage = sharedMemory(frequencies);
                 int memCount = 0;

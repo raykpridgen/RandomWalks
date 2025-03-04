@@ -34,7 +34,7 @@ class ParticleDataList(ctypes.Structure):
 class MainWindow(QMainWindow):
 
     SHM_NAME = "/particle_shm"
-    PARTICLE_COUNT = 325
+    PARTICLE_COUNT = 1000
     STRUCT_FORMAT = f"{PARTICLE_COUNT * 3}f ii"
     STRUCT_SIZE = struct.calcsize(STRUCT_FORMAT)
 

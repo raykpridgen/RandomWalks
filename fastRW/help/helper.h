@@ -39,7 +39,7 @@ typedef struct {
 
 float moveProbCalc(float D, float b, float dt);
 void initializeParticles(Particle partList[], int numParts);
-bool moveParticleProb(Particle *particle, float jumpProb, float driftVal, float moveDistance, pcg32_random_t *rng_states);
+bool moveParticleProb(Particle *particle, float jumpProb, float driftVal, pcg32_random_t *rng_states);
 bool moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance, pcg32_random_t *rng_states);
 void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
 void initialize_rng_states(int num_threads, pcg32_random_t *rng_states);
