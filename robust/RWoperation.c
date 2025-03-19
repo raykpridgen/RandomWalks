@@ -18,8 +18,7 @@
 #include "inc/helper.h"
 
 #define SHM_NAME "/particle_shm"
-#define PARTICLE_COUNT 325
-
+#define SEM_NAME "/particle_sem"
 
 int main(int argc, char *argv[]) {
     if (argc != 8) {
@@ -44,6 +43,30 @@ int main(int argc, char *argv[]) {
     float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
     float jumpProb = gamma * deltaT;
 
+    // Open shared memory and populate particles with 0s
+    int fd;
+    sem_t* sem;
+    ParticleStruct* particleList = initializeParticles(numParticles, &fd, &sem);
+    if (particleList == NULL)
+    {
+        perror("Failed to init particles. Returning.\n");
+    }
+
+    struct stat shm_stat;
+    fstat(fd, &shm_stat);
+    if (shm_stat.st_size == getSize(numParticles))
+    {
+
+        // Establish data in the structure
+        particleList->count = numParticles;
+        for (int i = 0; i < numParticles; i++)
+        {
+            // All x's are zero, half 1 half 0 for y
+            particleList->particles[i].x = 0;
+            particleList->particles[i].y = i % 2;
+        }
+    }
+    
     // Error detection for incorrect cores
     if (coresToUse > omp_get_num_procs()) 
     {
@@ -54,9 +77,10 @@ int main(int argc, char *argv[]) {
     {
         printf("Using %d threads.\n", coresToUse);
     }
+    // Set threads
     omp_set_num_threads(coresToUse);
 
-    // Allocate specific storage for each cores RNG state
+    // Allocate specific storage for each core's RNG state
     pcg32_random_t *rng_states = malloc(coresToUse * sizeof(pcg32_random_t));
 
     // Confirm allocation 
@@ -72,20 +96,8 @@ int main(int argc, char *argv[]) {
     // Set unique states for each thread, used for randomness
     initialize_rng_states(coresToUse, rng_states);
 
-    // Open shared memory and populate particles with 0s
-    ParticleStruct* particleList = initializeParticles();
-    if (particleList == NULL)
-    {
-        perror("Failed to init particles. Returning.\n");
-    }
+    printf("Initialization complete.\n");
 
-    printf("Initialization complete...\n");
-
-    int numMovesProb = 0;
-    int numJumpsProb = 0; 
-
-    
-    printf("Computing...\n");
     // For each increment defined
     for (int g = 0; g < (int)increments / step; g++)
     {

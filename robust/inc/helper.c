@@ -13,25 +13,23 @@
 #include <string.h>  // For memset() (if needed)
 #include <unistd.h> 
 #include <errno.h>
+#include <semaphore.h>
 #include "pcg_basic.h"
 
 #define SHM_NAME "/particle_shm"
-#define PARTICLE_COUNT 325
+#define SEM_NAME "/particle_sem"
 #ifndef HELPER_H
 #define HELPER_H
 
-
 typedef struct {
-    int x;
-    int y;
+    float x;
+    float y;
 } Particle;
 
 typedef struct {
-    Particle particles[PARTICLE_COUNT];
     int count;
-    bool read;
+    Particle* particles;
 } ParticleStruct;
-
 
 // Calculate probability for a move
 float moveProbCalc(float D, float b, float dt)
@@ -50,79 +48,119 @@ float moveDistanceCalc(float diffusionConstant, float deltaT)
 }
 
 // Initialize particles within shared memory
-ParticleStruct* initializeParticles()
+ParticleStruct* initializeParticles(int numParts, int* fd, sem_t** sem)
 {
+    size_t size = getSize(numParts);
     // Try to open existing shared memory
-    int shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
+    *fd = shm_open(SHM_NAME, O_RDWR, 0666);
     bool created = false;
     // If it doesn't exist, create it
-    if (shm_fd == -1) 
+    if (*fd == -1) 
     {
         if (errno == ENOENT) 
         {
             printf("Shared memory not found, creating new segment...\n");
-            shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+            *fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
             created = true;
         }
-        if (shm_fd == -1) 
+        if (*fd == -1) 
         {
             perror("shm_open failed");
-            close(shm_fd);
+            close(*fd);
             return NULL;
         }
     }
 
-    // Initalize if block is created within function
-    if (created) 
+    // Check that sizes match
+    struct stat shm_stat;
+    if (fstat(*fd, &shm_stat) == -1) 
     {
-        if (ftruncate(shm_fd, sizeof(ParticleStruct)) == -1) 
+        perror("fstat failed");
+        close(*fd);
+        return NULL;
+    }
+
+    if (created || shm_stat.st_size != size) 
+    {
+        printf("Existing shared memory size mismatch, resizing...\n");
+        if (ftruncate(*fd, size) == -1) 
         {
             perror("ftruncate failed");
-            close(shm_fd);
+            close(*fd);
             return NULL;
         }
     }
 
     // Map shared memory
-    ParticleStruct *shared_data = mmap(NULL, sizeof(ParticleStruct), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    void* shared_data = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, *fd, 0);
     if (shared_data == MAP_FAILED) 
     {
         perror("mmap failed");
-        close(shm_fd);
+        close(*fd);
         return NULL;
     }
-    // Set values appropriately
-    if (created)
+
+    // Open / Create semaphore
+    *sem = sem_open(SEM_NAME, O_CREAT, 0666, 1);
+    if (*sem == SEM_FAILED)
     {
-        // Set all values in struct to zero
-        memset(shared_data, 0, sizeof(ParticleStruct));
-        // Set count
-        shared_data->count = PARTICLE_COUNT;
-        // Set read value to true so python doesn't read during initialization
-        shared_data->read = true;
-        // Set values to zero for each particle
-        for (int i = 0; i < PARTICLE_COUNT; i++)
-        {
-            // Set x, half y on top half y on bottom
-            shared_data->particles[i].x = 0;
-            if (i < PARTICLE_COUNT / 2)
-            {
-                shared_data->particles[i].y = 1;
-            }
-            else
-            {
-                shared_data->particles[i].y = 0;
-            }
-        }
+        perror("sem_open failed.\n");
+        munmap(shared_data, size);
+        close(*fd);
+        return NULL;
     }
 
     // Return the pointer to the shared memory
-    return shared_data;
+    return (ParticleStruct*)shared_data;
+}
+
+// Resize structure based on old and new sizes
+ParticleStruct* resizeSharedMemory(int fd, ParticleStruct* oldPointer, size_t oldSize, int newNumber)
+{
+    // Set size
+    size_t newSize = sizeof(ParticleStruct) + newNumber * sizeof(Particle);
+
+    // Unmap old memory
+    if (munmap(oldPointer, oldSize) == -1)
+    {
+        perror("munmap failed.");
+        return NULL;
+    }
+
+    // Resize the shared memory
+    if (ftruncate(fd, newSize) == -1) {
+        perror("ftruncate failed");
+        exit(1);
+    }
+
+    // Remap the shared memory
+    void* new_ptr = mmap(0, newSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (new_ptr == MAP_FAILED) {
+        perror("mmap failed");
+        exit(1);
+    }
+
+    return (ParticleStruct*)new_ptr;
+
+}
+
+// Calculate size of the shared memory block based on particles
+size_t getSize(int numParts)
+{
+    size_t size = sizeof(ParticleStruct) + numParts * sizeof(Particle);
+    return size;
 }
 
 // Move particles in a given step
-int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pcg32_random_t *rng_states, int step)
+int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pcg32_random_t *rng_states, int step, sem_t* sem)
 {
+    // Check semaphore logic to proceed correctly
+    if (sem_wait(sem) == -1)
+    {
+        perror("sem_wait failed.");
+        return 1;
+    }
+
     // For iterations in step
     for (int k = 0; k < step; k++)
     {
@@ -133,7 +171,8 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
             // Get current thread
             int thread_id = omp_get_thread_num();
             // Calculate jump varaible
-            float jumpRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
+            uint32_t rand_val = pcg32_random_r(&rng_states[thread_id]);
+            float jumpRand = (float)(rand_val & 0x7FFFFFFF) / (float)0x7FFFFFFF;
             // If jump is satisfied, move particle to other line
             if (jumpRand < jumpProb)
             {
@@ -143,7 +182,7 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
             else
             {
                 // Thread safe random number for x-axis
-                float moveRand = (float)pcg32_random_r(&rng_states[thread_id]) / UINT32_MAX;
+                float moveRand = (float)(rand_val >> 16) / (float)0xFFFF;
                 // Flip probability if on the bottom line
                 float localMoveProb = (sharedData->particles[i].y == 0) ? 1 - moveProb : moveProb;
                 if (moveRand < localMoveProb)
@@ -159,13 +198,41 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
             }
         }
     }
-    // Set data to unread
-    sharedData->read = false;
+
+    // Signal python to read data
+    if (sem_post(sem) == -1)
+    {
+        perror("sem_post failed.");
+        return 1;
+    }
+    
     return 0;
 }
 
-// Initialize RNG states for each thread
-void initialize_rng_states(int num_threads, pcg32_random_t *rng_states);
+// Initialize states for each thread for unique RNG generation
+void initialize_rng_states(int num_threads, pcg32_random_t *rng_states) {
+    // Open OMP block
+    #pragma omp parallel
+    {
+        // Get thread number
+        int thread_id = omp_get_thread_num();
+        if (thread_id >= num_threads) {
+            printf("Error: thread_id %d is out of bounds\n", thread_id);
+            exit(1);
+        }
+        // Ensure that rng_states[thread_id] is a valid pointer before accessing it
+        unsigned long long seed = (thread_id + 1) * 123456789ULL;
+        //printf("Thread %d initializing RNG state\nSeed: %llx\n", thread_id, seed);
+        #pragma omp barrier
+        pcg32_srandom_r(&rng_states[thread_id], seed, thread_id);
+        #pragma omp barrier
+    }
+}
+
 // Round a float value to a number of decimal places
-float roundValue(float number, int decimals);
+float roundValue(float number, int decimals)
+{
+    float multiple = powf(10.0f, decimals); // Use float-specific powf()
+    return roundf(number * multiple) / multiple;
+}
 #endif
