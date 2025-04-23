@@ -7,6 +7,7 @@
         "float.h": "c",
         "stdbool.h": "c",
         "stat.h": "c",
-        "mman.h": "c"
+        "mman.h": "c",
+        "limits.h": "c"
     }
 }

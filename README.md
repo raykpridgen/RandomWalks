@@ -26,3 +26,24 @@ gamma - jump factor
 
 numParticles - number of particles to simulate
 
+Python initializes both semaphores and shared memory, then starts the C program.
+C program runs a batch in moveParticles:
+Acquires /particle_sem.
+Updates particleList.
+Releases /particle_sem.
+Posts /particle_ready to signal completion.
+Python waits on /particle_ready:
+Once signaled, acquires /particle_sem.
+Reads particleList.
+Releases /particle_sem.
+Updates the plot.
+Repeat for each batch until the C program completes.
+
+c / usleep uses microseconds
+py / timer uses milliseconds
+1 second = 1,000 milliseconds = 1,000,000 microseconds
+0.1s = 100ms = 100,000mcs
+
+current:
+1,000 ms = 1 second
+10,000 mcs = 0.01 second

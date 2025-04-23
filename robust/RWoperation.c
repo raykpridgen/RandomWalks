@@ -12,20 +12,21 @@
 #include <sys/stat.h>  // For mode constants (0666)
 #include <string.h>  // For memset() (if needed)
 #include <unistd.h>
-#include <sys/ipc.h>
-#include <sys/shm.h> 
 #include "inc/pcg_basic.h"
 #include "inc/helper.h"
 
 #define SHM_NAME "/particle_shm"
-#define SEM_NAME "/particle_sem"
 
 int main(int argc, char *argv[]) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    double time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+    printf("C started at: %.3f\n", time_ms);
+    
     if (argc != 8) {
         printf("Usage: ./RWoperation.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <numCores>\n");
         return 1;
     }
-    printf("Simulation Running...\n");
     
     // Parameters
     float deltaT = atof(argv[1]); // Delta t
@@ -35,37 +36,23 @@ int main(int argc, char *argv[]) {
     float gamma = atof(argv[5]); // Gamma
     int numParticles = atoi(argv[6]); // Number of particles
     int coresToUse = atoi(argv[7]); // Cores to use in multithreading
-    int step = 50; // How many iterations to run before sending data
+    int step = 10; // How many iterations to run before sending data
 
     // Behavior calculations
-    float moveDistance = moveDistanceCalc(diffCon, deltaT);
     int increments = (int)floor(timeConst / deltaT);
     float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
     float jumpProb = gamma * deltaT;
 
-    // Open shared memory and populate particles with 0s
-    int fd;
-    sem_t* sem;
-    ParticleStruct* particleList = initializeParticles(numParticles, &fd, &sem);
-    if (particleList == NULL)
-    {
-        perror("Failed to init particles. Returning.\n");
-    }
+    printf("Behavior:\nIncrements: %d\nMove Probability: %f\nJump Probability: %f\n", increments, moveProb, jumpProb);
 
-    struct stat shm_stat;
-    fstat(fd, &shm_stat);
-    if (shm_stat.st_size == getSize(numParticles))
+    // Open semaphore
+    sem_t* sem = sem_open("/particle_sem", O_RDWR);
+    if (sem == SEM_FAILED)
     {
-
-        // Establish data in the structure
-        particleList->count = numParticles;
-        for (int i = 0; i < numParticles; i++)
-        {
-            // All x's are zero, half 1 half 0 for y
-            particleList->particles[i].x = 0;
-            particleList->particles[i].y = i % 2;
-        }
+        perror("sem_open failed. Returning.\n");
+        exit(0);
     }
+    printf("Opened semaphore from Python\n");
     
     // Error detection for incorrect cores
     if (coresToUse > omp_get_num_procs()) 
@@ -73,53 +60,135 @@ int main(int argc, char *argv[]) {
         printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
         coresToUse = omp_get_num_procs();
     } 
-    else 
-    {
-        printf("Using %d threads.\n", coresToUse);
-    }
-    // Set threads
+    
+    // Set cores
     omp_set_num_threads(coresToUse);
-
+    int threadnum;
+    #pragma omp parallel
+    {
+        threadnum = omp_get_num_threads();
+    }
+    printf("Threads: %d\n", threadnum);
+    
     // Allocate specific storage for each core's RNG state
     pcg32_random_t *rng_states = malloc(coresToUse * sizeof(pcg32_random_t));
-
-    // Confirm allocation 
     if (rng_states == NULL) 
     {
         perror("Failed to allocate memory, returning");
-        exit(EXIT_FAILURE);
+        
+        free(rng_states);
+        exit(0);
     }
-    
-    // Clear memory for each allocation to ensure proper data storage
-    memset(rng_states, 0, coresToUse * sizeof(pcg32_random_t));
 
     // Set unique states for each thread, used for randomness
     initialize_rng_states(coresToUse, rng_states);
 
-    printf("Initialization complete.\n");
+    printf("All initialization successful. Running.\n");
 
-    // For each increment defined
-    for (int g = 0; g < (int)increments / step; g++)
+    // Calculate step break to send data back to python
+    int totalSteps = increments / step;
+    int remainder = increments % step;
+    
+    /**
+     * SEMAPHORE CRITICAL SECTION
+     */
+    clock_gettime(CLOCK_REALTIME, &ts);
+    time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+    printf("C waiting for init: %.3f\n", time_ms);
+    sem_wait(sem);
+    clock_gettime(CLOCK_REALTIME, &ts);
+    time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+    printf("C acquired for init: %.3f\n", time_ms);
+    // Open shared memory
+    int fd;
+    ParticleStruct* particleList = initializeParticles(numParticles, &fd);
+    if (particleList == NULL)
     {
-        // If read flag is marked read
-        if (particleList->read)
-        {
-            printf("Data received from Python....\n");
-            // Perform this step's iterations
-            moveParticles(particleList, moveProb, jumpProb, rng_states, step);
-        }
-        // While flag is set to unread
-        while (!particleList->read)
-        {   
-            // Wait for python
-            sleep(1);
-        }
+        perror("Failed to init particles. Returning.\n");
+        close(fd);
+        sem_post(sem);
         
+        free(rng_states);
+        exit(0);
+    }
+    if (particleList->count != numParticles)
+    {
+        printf("Size mismatch, expected %d, got %d. Returning. \n", numParticles, particleList->count);
+        munmap(particleList, getSize(numParticles));
+        close(fd);
+        sem_post(sem);
+        
+        free(rng_states);
+        exit(0);
+    }
+
+    sem_post(sem);
+    clock_gettime(CLOCK_REALTIME, &ts);
+    time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+    printf("C posted from init: %.3f\n", time_ms);
+    // For each increment defined
+    for (int g = 0; g < totalSteps; g++)
+    {
+        clock_gettime(CLOCK_REALTIME, &ts);
+        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+        printf("C waiting for computation: %.3f\n", time_ms);
+        sem_wait(sem);
+        clock_gettime(CLOCK_REALTIME, &ts);
+        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+        printf("C acquired for computation: %.3f\n", time_ms);
+        // Perform this step's iterations
+        if (moveParticles(particleList, moveProb, jumpProb, rng_states, step) != 0)
+        {
+            printf("Move particles failed. Returning.\n");
+            munmap(particleList, getSize(numParticles));
+            close(fd);
+            sem_post(sem);
+            
+            free(rng_states);
+            exit(0);
+        }
+        printf("Batch %d: particle[0] x=%f, y=%f\n", g, particleList->particles[0].x, particleList->particles[0].y);
+        sem_post(sem);
+        clock_gettime(CLOCK_REALTIME, &ts);
+        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+        printf("C posted for computation: %.3f\n", time_ms);
+        // Microseconds
+        usleep(1000000);
+    }
+
+    // If step does not divide evenly, finish off iterations
+    if (remainder > 0)
+    {
+        clock_gettime(CLOCK_REALTIME, &ts);
+        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+        printf("C waiting for computation: %.3f\n", time_ms);
+        sem_wait(sem);
+        clock_gettime(CLOCK_REALTIME, &ts);
+        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+        printf("C acquired for computation: %.3f\n", time_ms);
+        if (moveParticles(particleList, moveProb, jumpProb, rng_states, remainder) != 0)
+        {
+            printf("Move particles failed. Returning.\n");
+            munmap(particleList, getSize(numParticles));
+            close(fd);
+            sem_post(sem);
+            free(rng_states);
+            exit(0);
+        }
+        sem_post(sem);
+        clock_gettime(CLOCK_REALTIME, &ts);
+        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+        printf("C waiting for computation: %.3f\n", time_ms);
+        usleep(10000);
     }
     
-    //free(particleListStep);
+    /**
+     * SEMAPHORE CRITIAL SECTION
+     */
+    // Dont close semaphore in case this is ran again. Python can clsoe.
+    munmap(particleList, getSize(numParticles));
+    close(fd);
     free(rng_states);
-
     //printf("Total time: %.2f seconds\n", omp_get_wtime() - startTime);
     return 0;
 }

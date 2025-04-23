@@ -21,14 +21,16 @@
 
 
 typedef struct {
-    float x;
     float y;
+    float x;
 } Particle;
 
 typedef struct {
     int count;
-    Particle* particles;
+    char padding[8];
+    Particle particles[];
 } ParticleStruct;
+
 
 // Calculate probability for a move
 float moveProbCalc(float D, float b, float dt);
@@ -37,19 +39,18 @@ float moveProbCalc(float D, float b, float dt);
 float moveDistanceCalc(float diffusionConstant, float deltaT);
 
 // Initialize particles within shared memory
-ParticleStruct* initializeParticles(int numParts, int* fd, sem_t** sem);
-
-// Resize structure based on old and new sizes
-ParticleStruct* resizeSharedMemory(int fd, ParticleStruct* oldPointer, size_t oldSize, int newNumber);
+ParticleStruct* initializeParticles(int numParts, int* fd);
 
 // Calculate size of the shared memory block based on particles
 size_t getSize(int numParts);
 
 // Move particles in a given step
-int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pcg32_random_t *rng_states, int step, sem_t* sem);
+int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pcg32_random_t *rng_states, int step);
 
 // Initialize states for each thread for unique RNG generation
 void initialize_rng_states(int num_threads, pcg32_random_t *rng_states);
 
 // Round a float value to a number of decimal places
 float roundValue(float number, int decimals);
+
+void cleanup_shared_memory(int fd, ParticleStruct* shared, size_t size);

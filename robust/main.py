@@ -6,169 +6,312 @@ from PyQt6.QtCore import Qt
 from pyqtgraph import PlotWidget
 import pyqtgraph as pg
 import sys
-import numpy as np
 import subprocess
 import os
 import mmap
 import struct
-import posix_ipc  # For POSIX semaphores (install with `pip install posix-ipc`)
+import posix_ipc
+import threading
+import queue
+import time
+from math import sqrt
+from datetime import datetime
 
 SHM_NAME = "/particle_shm"
-SEM_NAME = "/particle_sem"
+SEM_NAME  = "/particle_sem"
+
+C_EXECUTABLE = "./RWoperation"
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.x_vals = []
         self.y_vals = []
-        self.particle_count = 1000  # Default, adjustable via slider
+        self.particle_count = 1000
         self.shm_fd = None
         self.shm = None
         self.sem = None
+        self.process = None
+        self.output_queue = queue.Queue()
 
-        # Window properties
         self.setWindowTitle("Particle Simulation")
         self.setGeometry(100, 100, 1000, 600)
 
-        # Main layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.main_layout = QHBoxLayout()
         self.central_widget.setLayout(self.main_layout)
 
-        # Left: Graph
         self.graph_widget = PlotWidget()
         self.graph_widget.setBackground("black")
-        self.graph_widget.setTitle("Real-Time Particle Simulation", color="w", size="16pt")
+        self.graph_widget.setTitle("Particle Frequency at X Positions", color="w", size="16pt")
         self.graph_widget.showGrid(x=True, y=True)
         self.main_layout.addWidget(self.graph_widget, 2)
 
-        # Right: Controls
         self.control_panel = QGroupBox("Simulation Parameters")
         self.control_layout = QFormLayout()
         self.control_panel.setLayout(self.control_layout)
         self.main_layout.addWidget(self.control_panel, 1)
 
-        # Input fields
+        # Input widgets
         self.dt_input = QLineEdit("1")
         self.D_input = QLineEdit("1")
         self.T_slider = QSpinBox()
         self.T_slider.setRange(10, 10000)
-        self.T_slider.setValue(10)
+        self.T_slider.setValue(1000)
+
         self.b_slider = QSlider(Qt.Orientation.Horizontal)
         self.b_slider.setRange(-100, 100)
         self.b_slider.setValue(0)
+        self.b_value_label = QLabel("0.00")  # Label to display b value
+
         self.g_slider = QSlider(Qt.Orientation.Horizontal)
         self.g_slider.setRange(0, 100)
-        self.g_slider.setValue(0)
+        self.g_slider.setValue(10)
+        self.g_value_label = QLabel("0.10")  # Label to display g value
+
         self.particles_slider = QSlider(Qt.Orientation.Horizontal)
         self.particles_slider.setRange(1, 100000)
         self.particles_slider.setValue(self.particle_count)
+        self.particles_value_label = QLabel(str(self.particle_count))  # Label to display particles value
 
-        # Add to control panel
+        # Connect sliders to update their labels
+        self.b_slider.valueChanged.connect(self.update_b_label)
+        self.g_slider.valueChanged.connect(self.update_g_label)
+        self.particles_slider.valueChanged.connect(self.update_particles_label)
+
+        # Add widgets to layout with labels
         self.control_layout.addRow(QLabel("dt:"), self.dt_input)
         self.control_layout.addRow(QLabel("T:"), self.T_slider)
         self.control_layout.addRow(QLabel("D:"), self.D_input)
-        self.control_layout.addRow(QLabel("b:"), self.b_slider)
-        self.control_layout.addRow(QLabel("g:"), self.g_slider)
-        self.control_layout.addRow(QLabel("Particles:"), self.particles_slider)
+        
+        b_layout = QHBoxLayout()
+        b_layout.addWidget(self.b_slider)
+        b_layout.addWidget(self.b_value_label)
+        self.control_layout.addRow(QLabel("b:"), QWidget())
+        self.control_layout.addRow(b_layout)
 
-        # Reset button
+        g_layout = QHBoxLayout()
+        g_layout.addWidget(self.g_slider)
+        g_layout.addWidget(self.g_value_label)
+        self.control_layout.addRow(QLabel("g:"), QWidget())
+        self.control_layout.addRow(g_layout)
+
+        particles_layout = QHBoxLayout()
+        particles_layout.addWidget(self.particles_slider)
+        particles_layout.addWidget(self.particles_value_label)
+        self.control_layout.addRow(QLabel("Particles:"), QWidget())
+        self.control_layout.addRow(particles_layout)
+
         self.reset_button = QPushButton("Reset Simulation")
-        self.reset_button.clicked.connect(self.reset_simulation)
+        self.reset_button.clicked.connect(self.resetButton)
         self.control_layout.addRow(self.reset_button)
 
-        # Plotting
         self.curve = self.graph_widget.plot(self.x_vals, self.y_vals, pen=None, symbol='o', symbolSize=5, symbolBrush='y')
 
-        # Initialize shared memory and semaphore
         self.initialize_shared_memory()
         self.timer = pg.QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
-        self.timer.start(50)  # 50ms ticks
+
+    def update_b_label(self, value):
+        """Update the label for b slider with its current value."""
+        self.b_value_label.setText(f"{value / 100:.2f}")
+
+    def update_g_label(self, value):
+        """Update the label for g slider with its current value."""
+        self.g_value_label.setText(f"{value / 100:.2f}")
+
+    def update_particles_label(self, value):
+        """Update the label for particles slider with its current value."""
+        self.particles_value_label.setText(str(value))
+
+    def resetButton(self):
+        """Handle reset button click: start simulation and let timer handle plotting."""
+        self.last_particle_data = None
+        self.reset_simulation()
+        # Milliseconds
+        self.timer.start(1000)
 
     def initialize_shared_memory(self):
-        """Initialize shared memory and semaphore for C to attach to."""
+        try:
+            posix_ipc.unlink_semaphore(SEM_NAME)
+        except posix_ipc.ExistentialError:
+            pass
+
+        self.sem = posix_ipc.Semaphore(SEM_NAME, posix_ipc.O_CREAT, initial_value=1)
+        print(f"Set up semaphore {SEM_NAME} with initial value of 1.\n")
+
+        print(f"Python waiting at: {(time.time() * 1000):.3f}\n")
+        self.sem.acquire(timeout=10)
+        print(f"Semaphore acquired, value now zero: {(time.time() * 1000):.3f}\n")
+
         self.particle_count = self.particles_slider.value()
-        size = 4 + self.particle_count * 8  # sizeof(int) + sizeof(Particle) * count
+        size = 12 + self.particle_count * 8
+        self.shm = posix_ipc.SharedMemory(SHM_NAME, posix_ipc.O_CREAT | posix_ipc.O_RDWR, size=size)
+        self.shm_buf = mmap.mmap(self.shm.fd, size, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
 
-        # Create shared memory
-        self.shm_fd = os.open(SHM_NAME, os.O_CREAT | os.O_RDWR, 0o666)
-        os.ftruncate(self.shm_fd, size)
-        self.shm = mmap.mmap(self.shm_fd, size, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
+        self.shm_buf[0:4] = struct.pack('i', self.particle_count)
+        offset = 12
+        for i in range(self.particle_count):
+            self.shm_buf[offset:offset+4] = struct.pack('f', float(i % 2))
+            self.shm_buf[offset+4:offset+8] = struct.pack('f', 0.0)
+            offset += 8
 
-        # Write initial count
-        self.shm[0:4] = struct.pack('i', self.particle_count)
+        self.sem.release()
+        print(f"Semaphore released, value now 1: {(time.time() * 1000):.3f}\n")
 
-        # Create semaphore (starts at 0, Python waits for C)
-        self.sem = posix_ipc.Semaphore(SEM_NAME, posix_ipc.O_CREAT, initial_value=0)
+    def read_output(self, pipe, label):
+        for line in iter(pipe.readline, ''):
+            self.output_queue.put(f"{label}: {line.strip()}")
+        pipe.close()
 
     def reset_simulation(self):
-        """Launch C program with parameters."""
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+            print("Terminated previous C process.")
+
+        self.cleanup_shared_memory()
+        self.initialize_shared_memory()
+
         dt = self.dt_input.text()
         T = self.T_slider.value()
         D = self.D_input.text()
-        b = self.b_slider.value() / 100.0  # Scale to -1 to 1
-        g = self.g_slider.value() / 100.0  # Scale to 0 to 1
+        b = self.b_slider.value() / 100.0
+        g = self.g_slider.value() / 100.0
         particles = self.particles_slider.value()
-        cores = 4  # Example, adjust as needed
+        cores = 4
 
-        # If particle count changed, reinitialize shared memory
-        if particles != self.particle_count:
-            self.cleanup_shared_memory()
-            self.initialize_shared_memory()
-
-        command = ["./RWoperation", str(dt), str(T), str(D), str(b), str(g), str(particles), str(cores)]
-        print(f"Calling C program: {' '.join(command)}")
-        self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    def read_shared_memory(self):
-        """Read particle data from shared memory."""
-        self.sem.acquire()  # Wait for C to signal
-
-        count = struct.unpack('i', self.shm[0:4])[0]
-        particles = []
-        offset = 4
-        for _ in range(count):
-            x = struct.unpack('f', self.shm[offset:offset+4])[0]
-            y = struct.unpack('f', self.shm[offset+4:offset+8])[0]
-            particles.append((x, y))
-            offset += 8
-
-        self.sem.release()  # Signal C to continue
-        return particles
-
-    def update_plot(self):
-        """Fetch new data from C and update the graph."""
-        if hasattr(self, 'process') and self.process.poll() is not None:
-            self.timer.stop()
-            stdout, stderr = self.process.communicate()
-            print(f"C Output: {stdout.decode('utf-8')}")
-            print(f"C Error: {stderr.decode('utf-8')}")
+        if not os.path.exists(C_EXECUTABLE):
+            print(f"Error: {C_EXECUTABLE} not found. Please compile it first.")
             return
 
-        particles = self.read_shared_memory()
-        self.x_vals, self.y_vals = zip(*particles) if particles else ([], [])
-        if self.x_vals and self.y_vals:
-            self.curve.setData(self.x_vals, self.y_vals)
+        command = [C_EXECUTABLE, str(dt), str(T), str(D), str(b), str(g), str(particles), str(cores)]
+        print(f"Running C program: {' '.join(command)}")
+        self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+
+        threading.Thread(target=self.read_output, args=(self.process.stdout, "C Output"), daemon=True).start()
+        threading.Thread(target=self.read_output, args=(self.process.stderr, "C Error"), daemon=True).start()
+
+        #time.sleep(0.1)
+
+    def read_shared_memory(self):
+        print(f"Python waiting at: {(time.time() * 1000):.3f}\n")
+        try:
+            if not self.sem.acquire(timeout=5):
+                print(f"Semaphore acquire timed out: {(time.time() * 1000):.3f}")
+                return []
+        except posix_ipc.BusyError:
+            print(f"Semaphore busy, continuing...\n")
+            return []
+        print(f"Semaphore acquired, value now zero: {(time.time() * 1000):.3f}\n")
+        count = struct.unpack('i', self.shm[0:4])[0]
+        topParticles = {}
+        bottomParticles = {}
+        offset = 12
+        minX = 0
+        maxX = 0
+        
+        for _ in range(count):
+            y = struct.unpack('f', self.shm[offset:offset+4])[0]
+            x = struct.unpack('f', self.shm[offset+4:offset+8])[0]
+            if x > 10000 or x < -10000:
+                print(f"X value error: {x}\n")
+                continue
+            if x > maxX:
+                maxX = x
+            if x < minX:
+                minX = x
+
+            if y == 1:
+                topParticles[x] = topParticles.get(x, 0) + 1
+            else:
+                bottomParticles[x] = bottomParticles.get(x, 0) + 1
+            
+            offset += 8
+        
+        print(f"Max X: {maxX}\nMin X: {minX}")
+        try:
+            moveDistance = sqrt(2 * float(self.D_input.text()) * float(self.dt_input.text()))
+        except ValueError as e:
+            print(f"Error calculating moveDistance: {e}")
+            moveDistance = 1.0
+
+        particles = []   
+        for x in set(topParticles.keys()) | set(bottomParticles.keys()):  # Fixed typo
+            if x in topParticles:
+                yPart = topParticles[x] / count
+                particles.append((x * moveDistance, yPart)) 
+            if x in bottomParticles:
+                yPart = bottomParticles[x] / count
+                particles.append((x * moveDistance, -1 * yPart))
+
+        self.sem.release()
+        print(f"Semaphore released, value now 1: {(time.time() * 1000):.3f}\n")
+        print(f"Size of particle list to plot: {len(particles)}")
+        newParts = [(x, y) for x, y in particles if not (x == 0 and y == 0)]
+        
+        print("Semaphore released, value now 1\n")
+        return newParts
+
+    def update_plot(self):
+        while not self.output_queue.empty():
+            print(self.output_queue.get())
+
+        if self.process is not None and self.process.poll() is None:
+            particles = self.read_shared_memory()
+            if particles:
+                self.x_vals, self.y_vals = zip(*particles)
+                self.curve.setData(self.x_vals, self.y_vals)
+        elif self.process is not None and self.process.poll() is not None:
+            self.timer.stop()
+            while not self.output_queue.empty():
+                print(self.output_queue.get())
+            print("C process has terminated.")
 
     def cleanup_shared_memory(self):
-        """Clean up shared memory and semaphore."""
-        if self.shm:
-            self.shm.close()
-        if self.shm_fd:
-            os.close(self.shm_fd)
-        if os.path.exists(f"/dev/shm{SHM_NAME}"):
-            os.unlink(f"/dev/shm{SHM_NAME}")
-        if self.sem:
-            self.sem.close()
-            self.sem.unlink()
+        # Semaphore cleanup
+        if hasattr(self, 'sem') and self.sem is not None:
+            try:
+                # Only release if we know we hold it (e.g., after acquire)
+                # Since we can't check, assume we don’t unless explicitly tracked
+                self.sem.close()  # Close Python’s handle
+                posix_ipc.unlink_semaphore(SEM_NAME)  # Remove from system
+            except posix_ipc.ExistentialError:
+                print("Semaphore already closed/unlinked")
+            except posix_ipc.BusyError:
+                print("Semaphore busy—skipping unlink")
+            except Exception as e:
+                print(f"Semaphore cleanup error: {e}")
+            finally:
+                self.sem = None
+
+        # Shared memory cleanup
+        if hasattr(self, 'shm_buf') and self.shm_buf is not None:
+            try:
+                self.shm_buf.close()  # Close mmap buffer
+            except Exception as e:
+                print(f"Error closing shm_buf: {e}")
+            finally:
+                self.shm_buf = None
+
+        if hasattr(self, 'shm') and self.shm is not None:
+            try:
+                posix_ipc.unlink_shared_memory(SHM_NAME)  # Remove from system
+            except posix_ipc.ExistentialError:
+                print("Shared memory already unlinked")
+            except Exception as e:
+                print(f"Shared memory cleanup error: {e}")
+            finally:
+                self.shm = None
 
     def closeEvent(self, event):
-        """Cleanup on window close."""
         print("Shutting down simulation...")
         self.timer.stop()
-        if hasattr(self, 'process') and self.process.poll() is None:
+        if self.process is not None and self.process.poll() is None:
             self.process.terminate()
             try:
                 self.process.wait(timeout=2)
@@ -181,4 +324,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+    sys.exit(app.exec()) 
