@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QSlider, QSpinBox, QPushButton
 )
 from PyQt6.QtCore import Qt
-from pyqtgraph import PlotWidget
+from pyqtgraph import PlotWidget # type: ignore
 import pyqtgraph as pg
 import sys
 import subprocess
@@ -18,7 +18,6 @@ from math import sqrt
 from datetime import datetime
 
 SHM_NAME = "/particle_shm"
-SEM_NAME  = "/particle_sem"
 
 C_EXECUTABLE = "./RWoperation"
 
@@ -30,7 +29,6 @@ class MainWindow(QMainWindow):
         self.particle_count = 1000
         self.shm_fd = None
         self.shm = None
-        self.sem = None
         self.process = None
         self.output_queue = queue.Queue()
 
@@ -108,7 +106,7 @@ class MainWindow(QMainWindow):
         self.control_layout.addRow(self.reset_button)
 
         self.curve = self.graph_widget.plot(self.x_vals, self.y_vals, pen=None, symbol='o', symbolSize=5, symbolBrush='y')
-
+        #self.solutionCurve = 
         self.initialize_shared_memory()
         self.timer = pg.QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
@@ -130,35 +128,23 @@ class MainWindow(QMainWindow):
         self.last_particle_data = None
         self.reset_simulation()
         # Milliseconds
-        self.timer.start(1000)
+        self.timer.start(100)
 
     def initialize_shared_memory(self):
-        try:
-            posix_ipc.unlink_semaphore(SEM_NAME)
-        except posix_ipc.ExistentialError:
-            pass
-
-        self.sem = posix_ipc.Semaphore(SEM_NAME, posix_ipc.O_CREAT, initial_value=1)
-        print(f"Set up semaphore {SEM_NAME} with initial value of 1.\n")
-
-        print(f"Python waiting at: {(time.time() * 1000):.3f}\n")
-        self.sem.acquire(timeout=10)
-        print(f"Semaphore acquired, value now zero: {(time.time() * 1000):.3f}\n")
 
         self.particle_count = self.particles_slider.value()
         size = 12 + self.particle_count * 8
         self.shm = posix_ipc.SharedMemory(SHM_NAME, posix_ipc.O_CREAT | posix_ipc.O_RDWR, size=size)
         self.shm_buf = mmap.mmap(self.shm.fd, size, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
 
-        self.shm_buf[0:4] = struct.pack('i', self.particle_count)
+        self.shm_buf[4:8] = struct.pack('i', self.particle_count)
         offset = 12
         for i in range(self.particle_count):
             self.shm_buf[offset:offset+4] = struct.pack('f', float(i % 2))
             self.shm_buf[offset+4:offset+8] = struct.pack('f', 0.0)
             offset += 8
 
-        self.sem.release()
-        print(f"Semaphore released, value now 1: {(time.time() * 1000):.3f}\n")
+        self.shm_buf[0:4] = struct.pack('i', 1)
 
     def read_output(self, pipe, label):
         for line in iter(pipe.readline, ''):
@@ -196,19 +182,14 @@ class MainWindow(QMainWindow):
         threading.Thread(target=self.read_output, args=(self.process.stdout, "C Output"), daemon=True).start()
         threading.Thread(target=self.read_output, args=(self.process.stderr, "C Error"), daemon=True).start()
 
-        #time.sleep(0.1)
-
     def read_shared_memory(self):
-        print(f"Python waiting at: {(time.time() * 1000):.3f}\n")
-        try:
-            if not self.sem.acquire(timeout=5):
-                print(f"Semaphore acquire timed out: {(time.time() * 1000):.3f}")
-                return []
-        except posix_ipc.BusyError:
-            print(f"Semaphore busy, continuing...\n")
+        print(f"Python waiting at: {(time.time() * 1000):.3f}")
+        start_time = time.time() * 1000
+           
+        # If flag is still one from when python last operated
+        if struct.unpack('i', self.shm_buf[0:4])[0] != 0:
             return []
-        print(f"Semaphore acquired, value now zero: {(time.time() * 1000):.3f}\n")
-        count = struct.unpack('i', self.shm[0:4])[0]
+        count = struct.unpack('i', self.shm_buf[4:8])[0]
         topParticles = {}
         bottomParticles = {}
         offset = 12
@@ -216,8 +197,8 @@ class MainWindow(QMainWindow):
         maxX = 0
         
         for _ in range(count):
-            y = struct.unpack('f', self.shm[offset:offset+4])[0]
-            x = struct.unpack('f', self.shm[offset+4:offset+8])[0]
+            x = struct.unpack('f', self.shm_buf[offset:offset+4])[0]
+            y = struct.unpack('f', self.shm_buf[offset+4:offset+8])[0]
             if x > 10000 or x < -10000:
                 print(f"X value error: {x}\n")
                 continue
@@ -249,12 +230,10 @@ class MainWindow(QMainWindow):
                 yPart = bottomParticles[x] / count
                 particles.append((x * moveDistance, -1 * yPart))
 
-        self.sem.release()
-        print(f"Semaphore released, value now 1: {(time.time() * 1000):.3f}\n")
+        self.shm_buf[0:4] = struct.pack('i', 1)
         print(f"Size of particle list to plot: {len(particles)}")
         newParts = [(x, y) for x, y in particles if not (x == 0 and y == 0)]
         
-        print("Semaphore released, value now 1\n")
         return newParts
 
     def update_plot(self):
@@ -273,22 +252,6 @@ class MainWindow(QMainWindow):
             print("C process has terminated.")
 
     def cleanup_shared_memory(self):
-        # Semaphore cleanup
-        if hasattr(self, 'sem') and self.sem is not None:
-            try:
-                # Only release if we know we hold it (e.g., after acquire)
-                # Since we can't check, assume we don’t unless explicitly tracked
-                self.sem.close()  # Close Python’s handle
-                posix_ipc.unlink_semaphore(SEM_NAME)  # Remove from system
-            except posix_ipc.ExistentialError:
-                print("Semaphore already closed/unlinked")
-            except posix_ipc.BusyError:
-                print("Semaphore busy—skipping unlink")
-            except Exception as e:
-                print(f"Semaphore cleanup error: {e}")
-            finally:
-                self.sem = None
-
         # Shared memory cleanup
         if hasattr(self, 'shm_buf') and self.shm_buf is not None:
             try:

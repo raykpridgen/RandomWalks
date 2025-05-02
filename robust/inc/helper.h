@@ -13,11 +13,9 @@
 #include <string.h>  // For memset() (if needed)
 #include <unistd.h> 
 #include <errno.h>
-#include <semaphore.h>
 #include "pcg_basic.h"
 
 #define SHM_NAME "/particle_shm"
-#define SEM_NAME "/particle_sem"
 
 
 typedef struct {
@@ -26,8 +24,9 @@ typedef struct {
 } Particle;
 
 typedef struct {
+    int read;
     int count;
-    char padding[8];
+    int padding[4];
     Particle particles[];
 } ParticleStruct;
 

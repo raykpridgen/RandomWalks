@@ -8,6 +8,8 @@
         "stdbool.h": "c",
         "stat.h": "c",
         "mman.h": "c",
-        "limits.h": "c"
+        "limits.h": "c",
+        "time.h": "c",
+        "math.h": "c"
     }
 }

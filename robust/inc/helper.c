@@ -13,32 +13,20 @@
 #include <string.h>  // For memset() (if needed)
 #include <unistd.h> 
 #include <errno.h>
-#include <semaphore.h>
 #include "pcg_basic.h"
+#include "helper.h"
 
 #define SHM_NAME "/particle_shm"
-#define SEM_NAME "/particle_sem"
 #ifndef HELPER_H
 #define HELPER_H
-
-typedef struct {
-    float y;
-    float x;
-} Particle;
-
-// Add a flag to determine read status
-typedef struct {
-    int count;
-    char padding[8];
-    Particle particles[];
-} ParticleStruct;
 
 // Calculate size of the shared memory block based on particles
 size_t getSize(int numParts)
 {
-    size_t size = sizeof(int) + 8 + numParts * sizeof(Particle);
+    size_t size = sizeof(int) + sizeof(int) + 4 + numParts * sizeof(Particle);
     return size;
 }
+
 // Calculate probability for a move
 float moveProbCalc(float D, float b, float dt)
 {
@@ -76,14 +64,46 @@ ParticleStruct* initializeParticles(int numParts, int* fd)
         close(*fd);
         return NULL;
     }
+    ParticleStruct* result = (ParticleStruct*)shared_data;
+    if (result->read != 1)
+    {
+        return NULL;
+    }
+    if (result->count != numParts) {
+        printf("Count mismatch: expected %d, got %d\n", numParts, result->count); 
+        fflush(stdout);
+        munmap(result, size);
+        close(*fd);
+        return NULL;
+    }
 
+    // Set read flag
+    result->read = 0;
+    
     // Return the pointer to the shared memory
-    return (ParticleStruct*)shared_data;
+    return result;
 }
 
 // Move particles in a given step
 int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pcg32_random_t *rng_states, int step)
 {
+    if (sharedData == NULL) {
+        printf("Error: sharedData is NULL\n"); fflush(stdout);
+        return -1;
+    }
+    if (rng_states == NULL) {
+        printf("Error: rng_states is NULL\n"); fflush(stdout);
+        return -1;
+    }
+    if (sharedData->read != 1) {
+        printf("Read value is not 1, cannot access.\n"); fflush(stdout);
+        return 0;
+    }
+    if (sharedData->count <= 0 || sharedData->count > 100000) {
+        printf("Invalid particle count: %d\n", sharedData->count); fflush(stdout);
+        return -1;
+    }
+
     // For iterations in step
     for (int k = 0; k < step; k++)
     {
@@ -96,7 +116,6 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
             // Calculate jump varaible
             uint32_t rand_val = pcg32_random_r(&rng_states[thread_id]);
             float jumpRand = (float)(rand_val & 0x7FFFFFFF) / (float)0x7FFFFFFF;
-            
             // If jump is satisfied, move particle to other line
             if (jumpRand < jumpProb)
             {
@@ -105,12 +124,13 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
             }
             else
             {
+                
                 // Thread safe random number for x-axis
                 uint32_t rand_val1 = pcg32_random_r(&rng_states[thread_id]);
                 float moveRand = (float)(rand_val1 & 0x7FFFFFFF) / (float)0x7FFFFFFF;
-                
                 // Flip probability if on the bottom line
                 float localMoveProb = (sharedData->particles[i].y == 0) ? 1 - moveProb : moveProb;
+                
                 if (moveRand < localMoveProb)
                 {
                     // Move one discrete increment positive
@@ -124,6 +144,8 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
             }
         }
     }
+    sharedData->read = 0;
+    printf("Batch: particle[0] x=%f, y=%f\n", sharedData->particles[0].x, sharedData->particles[0].y);
     return 0;
 }
 
