@@ -1,16 +1,11 @@
 #include <stdio.h>
-#include <stdbool.h>
 #include <math.h>
-#include <time.h>
 #include <omp.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <float.h>
-#include <limits.h>
-#include <fcntl.h>  // For shm_open() flags (O_CREAT, O_RDWR)
-#include <sys/mman.h>  // For mmap(), MAP_SHARED
-#include <sys/stat.h>  // For mode constants (0666)
-#include <string.h>  // For memset() (if needed)
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h> 
 #include <errno.h>
 #include "pcg_basic.h"
@@ -145,7 +140,6 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
         }
     }
     sharedData->read = 0;
-    printf("Batch: particle[0] x=%f, y=%f\n", sharedData->particles[0].x, sharedData->particles[0].y);
     return 0;
 }
 

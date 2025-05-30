@@ -1,16 +1,12 @@
 #include <stdio.h>
-#include <stdbool.h>
 #include <math.h>
 #include <time.h>
 #include <omp.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <float.h>
-#include <limits.h>
 #include <fcntl.h> 
 #include <sys/mman.h> 
 #include <sys/stat.h>
-#include <string.h> 
 #include <unistd.h>
 #include "inc/pcg_basic.h"
 #include "inc/helper.h"
@@ -19,10 +15,6 @@
 
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    double time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-    printf("C started at: %.3f\n", time_ms);
     
     if (argc != 8) {
         printf("Usage: ./RWoperation.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <numCores>\n");
@@ -55,12 +47,6 @@ int main(int argc, char *argv[]) {
     
     // Set cores
     omp_set_num_threads(coresToUse);
-    int threadnum;
-    #pragma omp parallel
-    {
-        threadnum = omp_get_num_threads();
-    }
-    printf("Threads: %d\n", threadnum);
     
     // Allocate specific storage for each core's RNG state
     pcg32_random_t *rng_states = malloc(coresToUse * sizeof(pcg32_random_t));
@@ -82,12 +68,6 @@ int main(int argc, char *argv[]) {
     int totalSteps = increments / step;
     int remainder = increments % step;
     
-    clock_gettime(CLOCK_REALTIME, &ts);
-    time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-    printf("C waiting for init: %.3f\n", time_ms);
-    clock_gettime(CLOCK_REALTIME, &ts);
-    time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-    printf("C acquired for init: %.3f\n", time_ms);
     // Open shared memory
     int fd;
     ParticleStruct* particleList = initializeParticles(numParticles, &fd);
@@ -108,19 +88,10 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-    clock_gettime(CLOCK_REALTIME, &ts);
-    time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-    printf("C posted from init: %.3f\n", time_ms);
     usleep(100000);
     // For each increment defined
     for (int g = 0; g < totalSteps; g++)
     {
-        clock_gettime(CLOCK_REALTIME, &ts);
-        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-        printf("C waiting for computation: %.3f\n", time_ms);
-        clock_gettime(CLOCK_REALTIME, &ts);
-        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-        printf("C acquired for computation: %.3f\n", time_ms);
         // Perform this step's iterations
         if (moveParticles(particleList, moveProb, jumpProb, rng_states, step) != 0)
         {
@@ -131,9 +102,6 @@ int main(int argc, char *argv[]) {
             free(rng_states);
             exit(1);
         }
-        clock_gettime(CLOCK_REALTIME, &ts);
-        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-        printf("C posted for computation: %.3f\n", time_ms);
         // Microseconds
         usleep(100000);
     }
@@ -141,12 +109,6 @@ int main(int argc, char *argv[]) {
     // If step does not divide evenly, finish off iterations
     if (remainder > 0)
     {
-        clock_gettime(CLOCK_REALTIME, &ts);
-        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-        printf("C waiting for computation: %.3f\n", time_ms);
-        clock_gettime(CLOCK_REALTIME, &ts);
-        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-        printf("C acquired for computation: %.3f\n", time_ms);
         if (moveParticles(particleList, moveProb, jumpProb, rng_states, remainder) != 0)
         {
             printf("Move particles failed. Returning.\n");
@@ -155,9 +117,6 @@ int main(int argc, char *argv[]) {
             free(rng_states);
             exit(0);
         }
-        clock_gettime(CLOCK_REALTIME, &ts);
-        time_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-        printf("C waiting for computation: %.3f\n", time_ms);
         usleep(10000);
     }
 

@@ -14,7 +14,7 @@ import posix_ipc
 import threading
 import queue
 import time
-from math import sqrt
+import math
 from datetime import datetime
 
 SHM_NAME = "/particle_shm"
@@ -105,7 +105,8 @@ class MainWindow(QMainWindow):
         self.reset_button.clicked.connect(self.resetButton)
         self.control_layout.addRow(self.reset_button)
 
-        self.curve = self.graph_widget.plot(self.x_vals, self.y_vals, pen=None, symbol='o', symbolSize=5, symbolBrush='y')
+        self.curve = self.graph_widget.plot(self.x_vals, self.y_vals, pen=None, symbol='o', symbolSize=5, symbolBrush='purple')
+        self.solCurve = self.graph_widget.plot([], [], pen='y', symbol='o', symbolSize=5, symbolBrush='y')
         #self.solutionCurve = 
         self.initialize_shared_memory()
         self.timer = pg.QtCore.QTimer()
@@ -128,7 +129,7 @@ class MainWindow(QMainWindow):
         self.last_particle_data = None
         self.reset_simulation()
         # Milliseconds
-        self.timer.start(100)
+        self.timer.start(50)
 
     def initialize_shared_memory(self):
 
@@ -169,21 +170,19 @@ class MainWindow(QMainWindow):
         b = self.b_slider.value() / 100.0
         g = self.g_slider.value() / 100.0
         particles = self.particles_slider.value()
-        cores = 4
+        cores = 20
 
         if not os.path.exists(C_EXECUTABLE):
             print(f"Error: {C_EXECUTABLE} not found. Please compile it first.")
             return
 
         command = [C_EXECUTABLE, str(dt), str(T), str(D), str(b), str(g), str(particles), str(cores)]
-        print(f"Running C program: {' '.join(command)}")
         self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
 
         threading.Thread(target=self.read_output, args=(self.process.stdout, "C Output"), daemon=True).start()
         threading.Thread(target=self.read_output, args=(self.process.stderr, "C Error"), daemon=True).start()
 
     def read_shared_memory(self):
-        print(f"Python waiting at: {(time.time() * 1000):.3f}")
         start_time = time.time() * 1000
            
         # If flag is still one from when python last operated
@@ -199,9 +198,7 @@ class MainWindow(QMainWindow):
         for _ in range(count):
             x = struct.unpack('f', self.shm_buf[offset:offset+4])[0]
             y = struct.unpack('f', self.shm_buf[offset+4:offset+8])[0]
-            if x > 10000 or x < -10000:
-                print(f"X value error: {x}\n")
-                continue
+            
             if x > maxX:
                 maxX = x
             if x < minX:
@@ -214,12 +211,7 @@ class MainWindow(QMainWindow):
             
             offset += 8
         
-        print(f"Max X: {maxX}\nMin X: {minX}")
-        try:
-            moveDistance = sqrt(2 * float(self.D_input.text()) * float(self.dt_input.text()))
-        except ValueError as e:
-            print(f"Error calculating moveDistance: {e}")
-            moveDistance = 1.0
+        moveDistance = math.sqrt(2 * float(self.D_input.text()) * float(self.dt_input.text()))
 
         particles = []   
         for x in set(topParticles.keys()) | set(bottomParticles.keys()):  # Fixed typo
@@ -231,11 +223,29 @@ class MainWindow(QMainWindow):
                 particles.append((x * moveDistance, -1 * yPart))
 
         self.shm_buf[0:4] = struct.pack('i', 1)
-        print(f"Size of particle list to plot: {len(particles)}")
         newParts = [(x, y) for x, y in particles if not (x == 0 and y == 0)]
         
         return newParts
 
+    def analyticSolution(self, x, t, v, D=1):    
+        lead = 1 / math.sqrt(4 * math.pi * D * t)
+        exponent = -1 * ((x - (v * t)) ** 2)/(4 * D * t)
+        return lead * (math.e ** exponent)
+    
+    def solutionCurve(self, minX, maxX):
+        solutionVals = []
+        timeIter = self.T_slider.value() / float(self.dt_input.text())
+        fudgeFactor = 1 #math.sqrt(8*float(self.dt_input.text()))
+        print(f"Time used: {timeIter}\n") 
+        for x in range(int(minX), int(maxX)):
+            y = self.analyticSolution(x, timeIter, self.b_slider.value(), float(self.D_input.text()))
+            solutionVals.append((x, y / fudgeFactor))
+        for x in range(int(minX), int(maxX)):
+            y = self.analyticSolution(x, timeIter, self.b_slider.value(), float(self.D_input.text()))
+            solutionVals.append((x, -y / fudgeFactor))
+            
+        return solutionVals
+    
     def update_plot(self):
         while not self.output_queue.empty():
             print(self.output_queue.get())
@@ -244,7 +254,10 @@ class MainWindow(QMainWindow):
             particles = self.read_shared_memory()
             if particles:
                 self.x_vals, self.y_vals = zip(*particles)
+                solution = self.solutionCurve(min(self.x_vals), max(self.x_vals))
+                self.x_vals_sol, self.y_vals_sol = zip(*solution)
                 self.curve.setData(self.x_vals, self.y_vals)
+                self.solCurve.setData(self.x_vals_sol, self.y_vals_sol)
         elif self.process is not None and self.process.poll() is not None:
             self.timer.stop()
             while not self.output_queue.empty():
