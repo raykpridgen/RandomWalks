@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
         // Microseconds
-        usleep(100000);
+        usleep(105000);
     }
 
     // If step does not divide evenly, finish off iterations
@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
             free(rng_states);
             exit(0);
         }
-        usleep(10000);
+        usleep(105000);
     }
 
     // Dont close semaphore in case this is ran again. Python can clsoe.

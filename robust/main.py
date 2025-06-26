@@ -26,7 +26,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.x_vals = []
         self.y_vals = []
-        self.particle_count = 1000
+        self.particle_count = 50000
         self.shm_fd = None
         self.shm = None
         self.process = None
@@ -65,11 +65,11 @@ class MainWindow(QMainWindow):
 
         self.g_slider = QSlider(Qt.Orientation.Horizontal)
         self.g_slider.setRange(0, 100)
-        self.g_slider.setValue(10)
-        self.g_value_label = QLabel("0.10")  # Label to display g value
+        self.g_slider.setValue(0)
+        self.g_value_label = QLabel("0.00")  # Label to display g value
 
         self.particles_slider = QSlider(Qt.Orientation.Horizontal)
-        self.particles_slider.setRange(1, 100000)
+        self.particles_slider.setRange(1, 1000000)
         self.particles_slider.setValue(self.particle_count)
         self.particles_value_label = QLabel(str(self.particle_count))  # Label to display particles value
 
@@ -105,9 +105,8 @@ class MainWindow(QMainWindow):
         self.reset_button.clicked.connect(self.resetButton)
         self.control_layout.addRow(self.reset_button)
 
-        self.curve = self.graph_widget.plot(self.x_vals, self.y_vals, pen=None, symbol='o', symbolSize=5, symbolBrush='purple')
-        self.solCurve = self.graph_widget.plot([], [], pen='y', symbol='o', symbolSize=5, symbolBrush='y')
-        #self.solutionCurve = 
+        self.curve = self.graph_widget.plot(self.x_vals, self.y_vals, pen=None, symbol='+', symbolSize=5, symbolBrush='purple')
+        self.solCurve = self.graph_widget.plot([], [], pen=None, symbol='o', symbolSize=5, symbolBrush='y')
         self.initialize_shared_memory()
         self.timer = pg.QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
@@ -129,20 +128,25 @@ class MainWindow(QMainWindow):
         self.last_particle_data = None
         self.reset_simulation()
         # Milliseconds
-        self.timer.start(50)
+        self.timer.start(100)
 
     def initialize_shared_memory(self):
-
+        # Set value and determine size of shared memory
         self.particle_count = self.particles_slider.value()
         size = 12 + self.particle_count * 8
+        # Map and set up connection to shared memory
         self.shm = posix_ipc.SharedMemory(SHM_NAME, posix_ipc.O_CREAT | posix_ipc.O_RDWR, size=size)
         self.shm_buf = mmap.mmap(self.shm.fd, size, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
 
+        # Place count in second 4 bytes
         self.shm_buf[4:8] = struct.pack('i', self.particle_count)
+        # 3 integers: flag, count, buffer
         offset = 12
+        # Pack structure
         for i in range(self.particle_count):
-            self.shm_buf[offset:offset+4] = struct.pack('f', float(i % 2))
-            self.shm_buf[offset+4:offset+8] = struct.pack('f', 0.0)
+            self.shm_buf[offset:offset+4] = struct.pack('f', 0.0)
+            self.shm_buf[offset+4:offset+8] = struct.pack('f', float(i % 2))
+            # 2 integers inside each particle
             offset += 8
 
         self.shm_buf[0:4] = struct.pack('i', 1)
@@ -169,6 +173,7 @@ class MainWindow(QMainWindow):
         D = self.D_input.text()
         b = self.b_slider.value() / 100.0
         g = self.g_slider.value() / 100.0
+        print(f"Gamma: {g}")
         particles = self.particles_slider.value()
         cores = 20
 
@@ -182,11 +187,13 @@ class MainWindow(QMainWindow):
         threading.Thread(target=self.read_output, args=(self.process.stdout, "C Output"), daemon=True).start()
         threading.Thread(target=self.read_output, args=(self.process.stderr, "C Error"), daemon=True).start()
 
-    def read_shared_memory(self):
-        start_time = time.time() * 1000
-           
+    def get_move_distance(self):
+        return math.sqrt(2 * float(self.D_input.text()) * float(self.dt_input.text()))
+        
+    def read_shared_memory(self):           
         # If flag is still one from when python last operated
         if struct.unpack('i', self.shm_buf[0:4])[0] != 0:
+            # print("Python read no update.\n")
             return []
         count = struct.unpack('i', self.shm_buf[4:8])[0]
         topParticles = {}
@@ -211,15 +218,18 @@ class MainWindow(QMainWindow):
             
             offset += 8
         
-        moveDistance = math.sqrt(2 * float(self.D_input.text()) * float(self.dt_input.text()))
+        moveDistance = self.get_move_distance()
 
         particles = []   
-        for x in set(topParticles.keys()) | set(bottomParticles.keys()):  # Fixed typo
+        totalParts = 0
+        for x in set(topParticles.keys()) | set(bottomParticles.keys()):
             if x in topParticles:
                 yPart = topParticles[x] / count
+                totalParts += topParticles[x]
                 particles.append((x * moveDistance, yPart)) 
             if x in bottomParticles:
                 yPart = bottomParticles[x] / count
+                totalParts += bottomParticles[x]
                 particles.append((x * moveDistance, -1 * yPart))
 
         self.shm_buf[0:4] = struct.pack('i', 1)
@@ -227,23 +237,30 @@ class MainWindow(QMainWindow):
         
         return newParts
 
-    def analyticSolution(self, x, t, v, D=1):    
+    def analyticSolution(self, x, t, b, D):    
         lead = 1 / math.sqrt(4 * math.pi * D * t)
-        exponent = -1 * ((x - (v * t)) ** 2)/(4 * D * t)
+        exponent = -1 * ((x - (b * t)) ** 2)/(4 * D * t)
         return lead * (math.e ** exponent)
     
     def solutionCurve(self, minX, maxX):
         solutionVals = []
-        timeIter = self.T_slider.value() / float(self.dt_input.text())
+        timeIter = self.T_slider.value()# / float(self.dt_input.text())
+        bValue = self.b_slider.value() / 100
+        dValue = float(self.D_input.text())
         fudgeFactor = 1 #math.sqrt(8*float(self.dt_input.text()))
-        print(f"Time used: {timeIter}\n") 
-        for x in range(int(minX), int(maxX)):
-            y = self.analyticSolution(x, timeIter, self.b_slider.value(), float(self.D_input.text()))
-            solutionVals.append((x, y / fudgeFactor))
-        for x in range(int(minX), int(maxX)):
-            y = self.analyticSolution(x, timeIter, self.b_slider.value(), float(self.D_input.text()))
-            solutionVals.append((x, -y / fudgeFactor))
-            
+        moveDistance = self.get_move_distance()
+        print(f"Solution values: t - {timeIter}, b - {bValue}, D - {dValue}\n")
+        if (minX == 0 and maxX == 0):
+            y = self.analyticSolution(0, timeIter, bValue, dValue)
+            solutionVals.append((0, y / fudgeFactor))
+            solutionVals.append((0, -y / fudgeFactor))
+            return solutionVals
+        for x in range(int(minX), int(maxX) + 1):
+            y = self.analyticSolution(x, timeIter, bValue, dValue)
+            solutionVals.append((x * moveDistance, y / fudgeFactor))
+        for x in range(int(minX), int(maxX) + 1):
+            y = self.analyticSolution(x, timeIter, -bValue, dValue)
+            solutionVals.append((x * moveDistance, -y / fudgeFactor))   
         return solutionVals
     
     def update_plot(self):

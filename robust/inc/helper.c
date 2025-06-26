@@ -28,7 +28,8 @@ float moveProbCalc(float D, float b, float dt)
     if (D == 0 && b == 0) {
         return 0.5;
     } else {
-        return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b)))); 
+        return 0.5 * (1 + (b / sqrt((2 * D) + (b * b)))); 
+        //return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b)))); 
     }
 }
 
@@ -91,10 +92,10 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
         return -1;
     }
     if (sharedData->read != 1) {
-        printf("Read value is not 1, cannot access.\n"); fflush(stdout);
+        //printf("Read value is not 1, cannot access.\n"); fflush(stdout);
         return 0;
     }
-    if (sharedData->count <= 0 || sharedData->count > 100000) {
+    if (sharedData->count <= 0) {
         printf("Invalid particle count: %d\n", sharedData->count); fflush(stdout);
         return -1;
     }
@@ -126,7 +127,7 @@ int moveParticles(ParticleStruct *sharedData, float moveProb, float jumpProb, pc
                 // Flip probability if on the bottom line
                 float localMoveProb = (sharedData->particles[i].y == 0) ? 1 - moveProb : moveProb;
                 
-                if (moveRand < localMoveProb)
+                if (moveRand > localMoveProb)
                 {
                     // Move one discrete increment positive
                     sharedData->particles[i].x += 1;
