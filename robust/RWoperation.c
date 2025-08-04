@@ -26,13 +26,13 @@ int main(int argc, char *argv[]) {
     float timeConst = atof(argv[2]); // Time Constant
     float diffCon = atof(argv[3]); // Diffusion Constant
     float bSpin = atof(argv[4]); // beta / bias
-    float gamma = atof(argv[5]); // Gamma
+    float gamma = atof(argv[5]); // GammaRWo
     int numParticles = atoi(argv[6]); // Number of particles
     int coresToUse = atoi(argv[7]); // Cores to use in multithreading
     int step = 10; // How many iterations to run before sending data
 
     // Behavior calculations
-    int increments = (int)floor(timeConst / deltaT);
+    int increments = (int)floor((timeConst / deltaT) * (1 + fabsf(bSpin)));
     float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
     float jumpProb = gamma * deltaT;
 
@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
         // Microseconds
-        usleep(105000);
+        usleep(55000);
     }
 
     // If step does not divide evenly, finish off iterations

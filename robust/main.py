@@ -52,11 +52,11 @@ class MainWindow(QMainWindow):
         self.main_layout.addWidget(self.control_panel, 1)
 
         # Input widgets
-        self.dt_input = QLineEdit("1")
+        self.dt_input = QLineEdit("0.01")
         self.D_input = QLineEdit("1")
         self.T_slider = QSpinBox()
         self.T_slider.setRange(10, 10000)
-        self.T_slider.setValue(1000)
+        self.T_slider.setValue(1)
 
         self.b_slider = QSlider(Qt.Orientation.Horizontal)
         self.b_slider.setRange(-100, 100)
@@ -128,7 +128,7 @@ class MainWindow(QMainWindow):
         self.last_particle_data = None
         self.reset_simulation()
         # Milliseconds
-        self.timer.start(100)
+        self.timer.start(50)
 
     def initialize_shared_memory(self):
         # Set value and determine size of shared memory
@@ -247,20 +247,19 @@ class MainWindow(QMainWindow):
         timeIter = self.T_slider.value()# / float(self.dt_input.text())
         bValue = self.b_slider.value() / 100
         dValue = float(self.D_input.text())
-        fudgeFactor = 1 #math.sqrt(8*float(self.dt_input.text()))
         moveDistance = self.get_move_distance()
-        print(f"Solution values: t - {timeIter}, b - {bValue}, D - {dValue}\n")
+        #print(f"Solution values: t - {timeIter}, b - {bValue}, D - {dValue}\n")
         if (minX == 0 and maxX == 0):
             y = self.analyticSolution(0, timeIter, bValue, dValue)
-            solutionVals.append((0, y / fudgeFactor))
-            solutionVals.append((0, -y / fudgeFactor))
+            solutionVals.append((0, y))
+            solutionVals.append((0, -y))
             return solutionVals
         for x in range(int(minX), int(maxX) + 1):
             y = self.analyticSolution(x, timeIter, bValue, dValue)
-            solutionVals.append((x * moveDistance, y / fudgeFactor))
+            solutionVals.append((x * moveDistance, y))
         for x in range(int(minX), int(maxX) + 1):
             y = self.analyticSolution(x, timeIter, -bValue, dValue)
-            solutionVals.append((x * moveDistance, -y / fudgeFactor))   
+            solutionVals.append((x * moveDistance, -y))   
         return solutionVals
     
     def update_plot(self):
