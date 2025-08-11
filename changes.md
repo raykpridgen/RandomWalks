@@ -104,3 +104,137 @@ Run larger sims
 
 ## Figure out Steady State
 Need to see if I can find a steady system with coupling on
+
+
+## Seeing Issues with Jones
+Note: CSV takes time as well
+rand() is not thread safe
+
+erand48() is thread safe
+rand_r() as well
+    Seed a separate one each time
+Every thread needs a different seed
+Create an outer block to spawn threads
+Threads are not forked and joined
+Seed each thread differently for different random number
+
+# 11/16/2024
+Forgot to update for a while. I have a couple working versions of a parallelized C code, right now I am just tyring to figure out which one works the best. 
+
+## Parallelization Options
+Need to solve the bottleneck of the random function.
+This comes with several factors, including worrying about storage of precomputed numbers
+
+## rand_r()
+
+
+## erand_48()
+
+# 11/19/2024
+## Went to computer lab to run large sims
+I am now testing several working versions of the code to see which is the best. 
+
+# 11/21/2024
+## Finishing Up Presentation
+## Running Many Different Simulations
+So for 10,000 p 10,000 t, about 50,000 moves is enough for it to collapse into a blob
+## Tweaks going forward
+I want to add in moves / jumps to return from C to see where steady state lies
+
+# 11/22/1024
+## Presented Today 
+Need to add more illustrations and diagrams of behind the scenes
+## Moving forward
+Harmon wants to get direct frequencies from each x-value
+Send [x, y] to CSV
+extra mode for [x, freq(y)] 
+Open up mathematica
+
+# 11/25/2024
+On break now
+## Continue parallelism journey, always be improving
+## Implement Frequency calculation this time
+
+# 12/6/2024
+Made small updates over break
+## Implemented frequency calculation
+this is now being used in MMA to compare to the fourier transform there
+## Continue testing
+Work with the bash script to automate the sims and see how they run
+
+# 12/29/2024
+## Frequency output - CSV and TXT
+Harmon wanted .txt output of the frequencies to compare with mathematica
+## SSH problems
+Have not been able to SSH into CCU computer
+
+# 1/2/2025
+## New problem with bias
+When I input a small bias like b < .1 it seems to default to a sim with no drift for some reason
+
+## Testing for solid state
+Finding simulation conditions where the concentration stays within bounds over extending time
+
+## Overarching problem
+I beleive an underlying problem of this simulation's minor unexpected behaviors is because of the rounding.
+I am going to have to do a thorough reevaluation of the code and make sure the values are preserved at each step.
+
+# 1/25/2025
+Forgot to update for a while, doing the following
+
+## Mathematica Work
+trying to get my code to match with the mathematica version
+
+## GUI Update
+This caused the implementation of:
+- Shared Memory
+- Python real time updates
+
+Current problem:
+I run into a seg fault traces right to when the random states get initialized.
+Not sure how to stop this, I have been using valgrind and the sanitizer flag. Chat GPT is no help.
+
+# 1/31/2025
+
+Continually debugging the shared memory
+Fixed small things with parallel version
+I need to attach and detach from the memory each time to ensure(?) updating of data
+
+## Future plans
+Potentially revisit random number generation
+GUI updates
+New Y? 
+
+# 02/06/2025
+Changes: Need to fix rounding with particle distance so there is no
+data overflow in the shared memory
+
+# 2/13/2025
+Added rounding function, changed the way function operates
+Now: 
+- Simulation runs with move distance set at 1
+- Converts to actual move distance at the end
+
+I also need to completely refactor and simplify a lot of this code. 
+too much experimkenmting has led it to be pretty unreadable an ddependent
+
+ Found a game changing bug
+ Need to rework top down
+ Starting and only using heap / shared memory
+ Heavy on the pointers
+ 
+# 2/18/25
+Future reference: Maybe reduce number of rand generations from 2 to 1 per particle
+
+first RNG: 0 - 1
+compared with a value, either moves and completes, or:
+second RNG: 0 - 1, compared with another value
+
+instead, 
+
+first RNG: 0 - 1
+compared with a value, either moves and completes, or:
+if fails, means RNG is less than
+checkedValue - RNG = (0 : 1) another float
+Multiply float up to int value, check even or odd
+Now only one RNG operation was used

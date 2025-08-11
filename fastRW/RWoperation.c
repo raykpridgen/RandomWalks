@@ -1,34 +1,34 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
 #include <time.h>
 #include <omp.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <float.h>
+#include <limits.h>
+#include <fcntl.h>  // For shm_open() flags (O_CREAT, O_RDWR)
+#include <sys/mman.h>  // For mmap(), MAP_SHARED
+#include <sys/stat.h>  // For mode constants (0666)
+#include <string.h>  // For memset() (if needed)
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h> 
+#include "pcg_basic.h"
+#include "help/helper.h"
 
-typedef struct
-{
-    float x;
-    int y;
-} Particle;
+#define SHM_NAME "/particle_shm"
+#define PARTICLE_COUNT 325
 
-float moveProbCalc(float D, float b, float dt);
-
-void initializeParticles(Particle partList[], int numParts);
-
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance);
-
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance);
-
-void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename);
 
 int main(int argc, char *argv[]) {
     if (argc != 8) {
-        printf("Usage: ./RW.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <creationType>\n");
+        printf("Usage: ./RWoperation.exe <deltaT> <timeConst> <diffCon> <bSpin> <gamma> <numParticles> <numCores>\n");
         return 1;
     }
-
-    srand(time(NULL));
-
+    double startTime = omp_get_wtime();
+    printf("C Project running\n");
+    
     // Parameters
     float deltaT = atof(argv[1]);
     float timeConst = atof(argv[2]);
@@ -37,171 +37,114 @@ int main(int argc, char *argv[]) {
     float gamma = atof(argv[5]);
     int numParticles = atoi(argv[6]);
     int coresToUse = atoi(argv[7]);
+    int step = 50; // How many iterations to run before sending data
 
-    if (coresToUse > omp_get_num_procs())
-    {
-        printf("Not enough cores. Using max: %d", omp_get_num_procs());
+    // Behavior calculations
+    float moveDistance = roundValue(sqrt(2 * diffCon * deltaT), 2);
+    int increments = (int)floor(timeConst / deltaT);
+    float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
+    float jumpProb = gamma * deltaT;
+    float shiftValue = roundValue(deltaT * bSpin, 2);
+
+    // error detection for incorrect cores
+    if (coresToUse > omp_get_num_procs()) {
+        printf("Not enough cores. Using max: %d\n", omp_get_num_procs());
         coresToUse = omp_get_num_procs();
+    } else {
+        printf("Using %d threads.\n", coresToUse);
     }
     omp_set_num_threads(coresToUse);
 
-    // Behaviors
-    float moveDistance = sqrt(2 * diffCon * deltaT);
-    float increments = floor(timeConst / deltaT);
-    float moveProb = moveProbCalc(diffCon, bSpin, deltaT);
-    float jumpProb = gamma * deltaT;
-    float shiftValue = deltaT * bSpin;
-
+    // Storage to hold each thread's rng state
+    pcg32_random_t *rng_states = malloc(coresToUse * sizeof(pcg32_random_t));
+    // Storage to hold particles to be moved by simulation
     Particle *particleListProb = malloc(numParticles * sizeof(Particle));
-    Particle *particleListStep = malloc(numParticles * sizeof(Particle));
+    // Confirm allocation for all
+    if (rng_states == NULL || particleListProb == NULL) {
+        perror("Failed to allocate memory, returning");
+        exit(EXIT_FAILURE);
+    }
+    
+    // Clear memory for each allocation to ensure proper data storage
+    printf("Clearing memory for rng_states\n");
+    memset(rng_states, 0, coresToUse * sizeof(pcg32_random_t));
+    printf("Clearing memory for particleListProb\n");
+    memset(particleListProb, 0, numParticles * sizeof(Particle));
 
+    // Set unique states for each thread, used for randomness
+    initialize_rng_states(coresToUse, rng_states);
+
+    // Generate particles within particle list, this is where origins are defined
     initializeParticles(particleListProb, numParticles);
-    initializeParticles(particleListStep, numParticles);
-    
-    // Increments
-    for(int i=0; i<increments; i++)
-    {
-        // Particles
-        #pragma omp parallel for 
-        for(int j=0; j<numParticles; j++)
-        {
-            moveParticleProb(&particleListProb[j], jumpProb, moveProb, moveDistance);
-        }
-        #pragma omp parallel for
-        for(int j=0; j<numParticles; j++)
-        {
-            moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance);
-        }
-    }
+    //initializeParticles(particleListStep, numParticles);
 
-    exportParticlesToCSV(particleListProb, numParticles, "sims/probSim.csv");
-    exportParticlesToCSV(particleListStep, numParticles, "sims/stepSim.csv");
-    
-    free(particleListProb);
-    free(particleListStep);
-}
+    printf("Starting simulation...\n");
+    double simStart = omp_get_wtime();
 
-void initializeParticles(Particle partList[], int numParts)
-{
-    for(int i=0; i<floor(numParts/2); i++)
-    {
-        partList[i].x = (float)0;
-        partList[i].y = 1;
-    }
-    for(int i=floor(numParts/2); i<numParts; i++)
-    {
-        partList[i].x = (float)0;
-        partList[i].y = 0;
-    }
-}
+    int numMovesProb = 0;
+    int numJumpsProb = 0; 
 
-void moveParticleProb(Particle *particle, float jumpProb, float moveProb, float moveDistance)
-{
-    float randJump = rand();
-    randJump = randJump / RAND_MAX;
-    // If jump succeeds
-    if (randJump < jumpProb)
-    {
-        // If particle is on the top line
-        particle->y = (particle->y == 0) ? 1 : 0;
-        return;
-    }
-    // Jump fails, do move
-    else
-    {
-        // Compliment probability if particle is on the bottom line
-        if(particle->y == 0)
-        {
-            moveProb = 1 - moveProb;
-        }
-
-        float randMove = rand();
-        randMove = randMove / RAND_MAX;
-        // Move succeeds - move right
-        if(randMove < moveProb)
-        {
-            particle->x = particle->x + moveDistance;
-
-        }
-        // Move fails - move left
-        else
-        {
-            particle->x = particle->x - moveDistance;
-        }
-    }
-}
-
-void moveParticleStep(Particle *particle, float jumpProb, float driftVal, float moveDistance)
-{
-    //printf("moved particle %f, %f\n", particle->x, particle->y);
-    float randJump = rand();
-    randJump = randJump / RAND_MAX;
-    // If jump succeeds
-    if (randJump < jumpProb)
-    {
-        // Swap particle position
-        particle->y = (particle->y == 0) ? 1 : 0;
-        return;
-    }
-    // Jump fails, do move
-    else
-    {
-        float moveRand = rand();
-        moveRand = moveRand / RAND_MAX;
-        if(particle->y == 1)
-        {
-            if(moveRand < 0.5)
-            {
-                particle->x = particle->x + moveDistance + driftVal;
-            }
-            else
-            {
-                particle->x = particle->x - moveDistance + driftVal;
-            }
-        }
-        else
-        {
-            if(moveRand < 0.5)
-            {
-                particle->x = particle->x + moveDistance - driftVal;
-            }
-            else
-            {
-                particle->x = particle->x - moveDistance - driftVal;
-            }
-        }
+    // Increments are set here
+    printf("Began computing...\n");
+    for (int i = 0; i < increments; i++) {
         
+        // Move particles
+        #pragma omp parallel for
+        for (int j = 0; j < numParticles; j++)
+        {
+            moveParticleProb(&particleListProb[j], jumpProb, moveProb, rng_states);
+            //moveParticleStep(&particleListStep[j], jumpProb, shiftValue, moveDistance);
+        }
+
+        if (i % step == 0 && i != 0)
+        {
+            printf("Step called, data transfer\n");
+            // Send data to python
+            int quit = 0;
+            #pragma omp single
+            {
+                // Convert data to frequencies
+                ParticleDataList frequencies = particlesToFrequency(particleListProb, numParticles);
+                // Now apply move distance to each X
+                for (int k = 0; i < frequencies.count; k++)
+                {
+                    frequencies.particles[k].x = frequencies.particles[k].x * moveDistance;
+                }
+                // Send the data to Python
+                int memMessage = sharedMemory(frequencies);
+                int memCount = 0;
+                while (memMessage == 1 && memCount < 10)
+                {   
+                    // Pause and run again until python catches up
+                    sleep(1);
+                    memMessage = sharedMemory(frequencies);
+                    memCount += 1;
+                }  
+                if (memCount == 10)
+                {
+                    printf("Python timed out. Returning.\n");
+                    free(particleListProb);
+
+                    //free(particleListStep);
+                    free(rng_states);
+                    quit = 1;
+                }
+            }
+            if (quit == 1)
+            {
+                return 1;
+            }
+        }
     }
-    //printf("to             %f, %f\n", particle->x, particle->y);
-}
 
-void exportParticlesToCSV(Particle particles[], int numParticles, const char *filename) {
+    double simEnd = omp_get_wtime();
+    printf("Simulation completed in %.2f seconds\n", simEnd - simStart);
 
-    FILE *file = fopen(filename, "w"); // Open file for writing
-    if (file == NULL) {
-        perror("Error opening file");
-        return;
-    }
+    free(particleListProb);
 
-    // Write the header
-    fprintf(file, "x,y\n");
+    //free(particleListStep);
+    free(rng_states);
 
-    // Write the data for each particle
-    for (int i = 0; i < numParticles; i++) {
-        fprintf(file, "%.2f,%d\n", particles[i].x, particles[i].y);
-    }
-
-    fclose(file); // Close the file
-}
-
-float moveProbCalc(float D, float b, float dt)
-{
-    if(D == 0 && b == 0)
-    {
-        return 0.5;
-    }
-    else
-    {
-        return 0.5 * (1 + (b / sqrt(((2 * D) / dt) + (b * b))));
-    }
+    //printf("Total time: %.2f seconds\n", omp_get_wtime() - startTime);
+    return 0;
 }

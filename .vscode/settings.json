@@ -1,0 +1,15 @@
+{
+    "files.associations": {
+        "cmath": "c",
+        "shm.h": "c",
+        "stdlib.h": "c",
+        "pcg_basic.h": "c",
+        "float.h": "c",
+        "stdbool.h": "c",
+        "stat.h": "c",
+        "mman.h": "c",
+        "limits.h": "c",
+        "time.h": "c",
+        "math.h": "c"
+    }
+}
