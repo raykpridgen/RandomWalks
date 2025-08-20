@@ -13,6 +13,8 @@ Each particle begins an increment by generating a random number compared with a 
 
 During countercurrent flow, particles on one y-axis will be influenced by a bias in the move probability, and the particles on the other y-axis will be influenced in an inverse manner. Cocurrent flow can be easily acheived by removing the logic for "localMoveProb" in the moveParticles function, so that the bias of each particle will be the same regardless of the y-axis. 
 
+Alongside the simulated particles, a solution curve is plotted to reflect statistical integrity and expected output with given parameters. This will reflect an ideal distribution when there are no "jumps" within particle movement.
+
 ## Parameters
 dt : Influences increments, jump probability, and in some cased move probability
 
