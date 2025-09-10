@@ -25,6 +25,17 @@ size_t getSize(int numParts)
 // Calculate probability for a move
 // RNG below output is a particle move right, greater than output is left
 // 0.5 is even moves L and R
+
+// Move distance calculation
+// How far a particle moves within x axis
+float moveDistanceCalc(float diffusionConstant, float deltaT)
+{
+    return sqrt(2 * diffusionConstant * deltaT);
+}
+
+// Other approach
+// Random is 50/50 L and R
+// Add move distance +/- sqrt(2D*dt) + b*dt
 float moveProbCalc(float D, float b, float dt)
 {
     if (D == 0 && b == 0) {
@@ -36,13 +47,6 @@ float moveProbCalc(float D, float b, float dt)
         float prob = 0.5 * (1 + b * sqrt(dt / (2 * D)));
         return fmax(0.0, fmin(1.0, prob));
     }
-}
-
-// Move distance calculation
-// How far a particle moves within x axis
-float moveDistanceCalc(float diffusionConstant, float deltaT)
-{
-    return sqrt(2 * diffusionConstant * deltaT);
 }
 
 // Initialize particles within shared memory
